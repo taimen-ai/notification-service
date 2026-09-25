@@ -1,73 +1,82 @@
 # notification-service
 
-Сервис уведомлений платформы Taimen: принимает уведомления от любого сервиса или
-скилла, выбирает каналы по настройкам получателя (веб-инбокс, Telegram, email),
-ведёт журнал доставки и принимает решения людей из каналов (кнопки Telegram).
+*English. Russian version: [README.ru.md](README.ru.md)*
 
-Дизайн — `specs/notifications/` суперпроекта, решения — TAI-ADR-0048 и TAI-ADR-0049;
-решения самого сервиса — [docs/adr/](docs/adr/). Каркас сервиса — задача N006
-(TASK-000415): отправка с дедупликацией, адресация principal / роль / группа,
-настройки и обязательные правила, воркер доставки с повторами, каналы `web` и
-`email`, веб-инбокс с потоком SSE. Канал Telegram (N007,
-[ADR-0003](docs/adr/0003-telegram-channel-and-decisions.md)): привязка личного
-чата кодом из IAM, привязка групп к workspace и роли, сообщения с кнопками
-решения — нажатие становится решением человека в ядре. Потребитель событий ядра
-(N008, [ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) превращает
-`approval.requested` в уведомление с действиями решения (их закрывает
-`approval.approved|rejected|cancelled`), а `task.verification_failed` — в
-уведомление владельцу задачи. Пакеты шлют уведомления скиллом `notify.send@1`
-([ADR-0004](docs/adr/0004-notify-send-skill.md), контракт —
+The notification service of the Taimen platform: it accepts notifications from any
+service or skill, chooses channels according to the recipient's preferences (web
+inbox, Telegram, email), keeps a delivery log and accepts human decisions from the
+channels (Telegram buttons).
+
+The design lives in `specs/notifications/` of the superproject, the platform
+decisions are TAI-ADR-0048 and TAI-ADR-0049; the service's own decisions are in
+[docs/adr/](docs/adr/). The service skeleton is task N006 (TASK-000415): sending
+with deduplication, addressing by principal / role / group, preferences and
+mandatory rules, a delivery worker with retries, the `web` and `email` channels, a
+web inbox with an SSE stream. The Telegram channel (N007,
+[ADR-0003](docs/adr/0003-telegram-channel-and-decisions.md)): linking a private
+chat with a code from IAM, linking groups to a workspace and a role, messages with
+decision buttons — a button press becomes a human decision in the core. The
+consumer of core events (N008,
+[ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) turns
+`approval.requested` into a notification with decision actions (closed by
+`approval.approved|rejected|cancelled`), and `task.verification_failed` into a
+notification to the task owner. Packages send notifications with the
+`notify.send@1` skill ([ADR-0004](docs/adr/0004-notify-send-skill.md), contract —
 [docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)).
 
-## Устройство
+ADRs are in Russian; English summaries on request.
 
-Один процесс: FastAPI (`/api/v1`), фоновый воркер доставки и потребитель
-событий ядра (SDK `control_plane_client.events`), своя PostgreSQL,
-миграции Alembic. Токены проверяет `platform-auth-sdk` (audience
-`notification-service`, scopes `notifications:send|read|admin`); principal'ов,
-роли и привязки к IAM сервис читает у Control Plane своим service account'ом.
-Подробности и контракт API — [ADR-0001](docs/adr/0001-notification-service-foundation.md),
-схема — `GET /openapi.json`.
+## Architecture
 
-## Запуск
+One process: FastAPI (`/api/v1`), a background delivery worker and a consumer of
+core events (the `control_plane_client.events` SDK), its own PostgreSQL, Alembic
+migrations. Tokens are verified by `platform-auth-sdk` (audience
+`notification-service`, scopes `notifications:send|read|admin`); principals, roles
+and IAM links are read from the Control Plane with the service's own service
+account. Details and the API contract —
+[ADR-0001](docs/adr/0001-notification-service-foundation.md), the schema —
+`GET /openapi.json`.
 
-Зависимости `platform-auth-sdk` и `control-plane-client` подключаются путём из
-соседних каталогов суперпроекта (`../platform-auth-sdk`, `../control-plane`).
+## Running
+
+The `platform-auth-sdk` and `control-plane-client` dependencies are installed by
+path from the neighbouring directories (`../platform-auth-sdk`,
+`../control-plane`).
 
 ```bash
 uv sync
 NS_DATABASE_URL=postgresql+psycopg://… uv run alembic upgrade head
-uv run notification-service          # API и воркер, порт NS_PORT (8000)
+uv run notification-service          # API and worker, port NS_PORT (8000)
 ```
 
-Настройки — переменные окружения `NS_*` (`src/notification_service/config.py`):
+Settings are `NS_*` environment variables (`src/notification_service/config.py`):
 
-| Переменная | Назначение |
+| Variable | Purpose |
 |---|---|
-| `NS_DATABASE_URL` | PostgreSQL сервиса |
-| `NS_IAM_URL`, `NS_IAM_ISSUER`, `NS_IAM_JWKS_URL` | проверка токенов; JWKS по умолчанию — `…/.well-known/jwks.json` IAM |
-| `NS_AUDIENCE` | собственный audience, по умолчанию `notification-service` |
-| `NS_CONTROL_PLANE_URL`, `NS_SERVICE_CLIENT_ID`, `NS_SERVICE_CLIENT_SECRET` | чтение каталога ядра service account'ом |
-| `NS_WORKER_ENABLED`, `NS_WORKER_POLL_SECONDS`, `NS_DELIVERY_MAX_ATTEMPTS`, `NS_DELIVERY_BACKOFF_SECONDS` | воркер доставки |
-| `NS_EMAIL_MODE` | `smtp`, `log` (staging: только запись в лог) или `disabled` |
+| `NS_DATABASE_URL` | the service's PostgreSQL |
+| `NS_IAM_URL`, `NS_IAM_ISSUER`, `NS_IAM_JWKS_URL` | token verification; JWKS defaults to IAM's `…/.well-known/jwks.json` |
+| `NS_AUDIENCE` | own audience, `notification-service` by default |
+| `NS_CONTROL_PLANE_URL`, `NS_SERVICE_CLIENT_ID`, `NS_SERVICE_CLIENT_SECRET` | reading the core directory with a service account |
+| `NS_WORKER_ENABLED`, `NS_WORKER_POLL_SECONDS`, `NS_DELIVERY_MAX_ATTEMPTS`, `NS_DELIVERY_BACKOFF_SECONDS` | delivery worker |
+| `NS_EMAIL_MODE` | `smtp`, `log` (staging: log only) or `disabled` |
 | `NS_EMAIL_FROM`, `NS_SMTP_HOST`, `NS_SMTP_PORT`, `NS_SMTP_STARTTLS`, `NS_SMTP_USERNAME`, `NS_SMTP_PASSWORD` | SMTP |
-| `NS_INBOX_POLL_SECONDS`, `NS_INBOX_KEEPALIVE_SECONDS` | поток SSE инбокса |
-| `NS_EVENTS_ENABLED`, `NS_EVENTS_START`, `NS_EVENTS_WORKSPACE_ID`, `NS_EVENTS_POLL_SECONDS` | потребитель событий ядра: вкл/выкл, откуда начать при первом запуске (`latest` по умолчанию, `earliest`), поддерево workspace (пусто — весь tenant), период опроса |
-| `NS_TELEGRAM_BOT_TOKEN`, `NS_TELEGRAM_WEBHOOK_SECRET` | бот Telegram и секрет вебхука (`secret_token` в `setWebhook`); без токена канала нет |
-| `NS_TELEGRAM_API_URL`, `NS_TELEGRAM_BOT_USERNAME`, `NS_TELEGRAM_TIMEOUT_SECONDS` | Bot API; имя бота — для команд и ссылок привязки групп |
-| `NS_CHANNEL_GROUP_CODE_TTL_SECONDS` | срок кода привязки группы (600 с) |
-| `NS_IAM_CHANNEL_AUDIENCE`, `NS_IAM_CHANNEL_SCOPE` | сервис как адаптер канала в IAM: `iam` / `iam:channel-links` |
-| `NS_TASK_URL_TEMPLATE` | ссылка на задачу в уведомлениях из событий, `{taskPublicId}` / `{taskId}`; пусто — без ссылки |
+| `NS_INBOX_POLL_SECONDS`, `NS_INBOX_KEEPALIVE_SECONDS` | inbox SSE stream |
+| `NS_EVENTS_ENABLED`, `NS_EVENTS_START`, `NS_EVENTS_WORKSPACE_ID`, `NS_EVENTS_POLL_SECONDS` | core event consumer: on/off, where to start on the first run (`latest` by default, `earliest`), workspace subtree (empty — the whole tenant), polling period |
+| `NS_TELEGRAM_BOT_TOKEN`, `NS_TELEGRAM_WEBHOOK_SECRET` | Telegram bot and webhook secret (`secret_token` in `setWebhook`); no token — no channel |
+| `NS_TELEGRAM_API_URL`, `NS_TELEGRAM_BOT_USERNAME`, `NS_TELEGRAM_TIMEOUT_SECONDS` | Bot API; the bot name is used in commands and group link URLs |
+| `NS_CHANNEL_GROUP_CODE_TTL_SECONDS` | lifetime of a group link code (600 s) |
+| `NS_IAM_CHANNEL_AUDIENCE`, `NS_IAM_CHANNEL_SCOPE` | the service as a channel adapter in IAM: `iam` / `iam:channel-links` |
+| `NS_TASK_URL_TEMPLATE` | task link in notifications built from events, `{taskPublicId}` / `{taskId}`; empty — no link |
 
-Без настроек IAM сервис отвечает `503` на все маршруты API, без настроек Control
-Plane — `503` на отправку людям и ролям; вебхук Telegram
-(`POST /channels/telegram/webhook`, публичный, проверяет заголовок
-`X-Telegram-Bot-Api-Secret-Token`) без токена бота отвечает `404`, без секрета —
-`401`; потребитель событий работает, когда
-настроены и Control Plane, и IAM. Секреты — только в окружении или
-`secrets/`, не в репозитории.
+Without IAM settings the service answers `503` on every API route; without Control
+Plane settings it answers `503` on sending to people and roles. The Telegram
+webhook (`POST /channels/telegram/webhook`, public, checks the
+`X-Telegram-Bot-Api-Secret-Token` header) answers `404` without a bot token and
+`401` without a secret; the event consumer runs when both the Control Plane and IAM
+are configured. Secrets live only in the environment or in `secrets/`, never in the
+repository.
 
-## Разработка
+## Development
 
 ```bash
 uv sync
@@ -75,9 +84,24 @@ NS_TEST_DATABASE_URL=postgresql+psycopg://… uv run pytest
 uv run ruff check . && uv run ruff format --check .
 ```
 
-Тесты пересоздают схему в `NS_TEST_DATABASE_URL` цепочкой миграций, SMTP —
-локальный сервер `aiosmtpd`, поток SSE — настоящий сервер uvicorn, Bot API,
-IAM и решения ядра — фейки по их контрактам (`tests/telegram_fakes.py`); запросы
-к IAM сверяются с моделями соседнего `../iam-service`, если он рядом. Каталог ядра
-в тестах сервиса — фейк по протоколу `Directory`; адаптер к ядру закреплён
-contract-тестом на моделях API Control Plane.
+The tests recreate the schema in `NS_TEST_DATABASE_URL` through the migration
+chain; SMTP is a local `aiosmtpd` server, the SSE stream is a real uvicorn server,
+the Bot API, IAM and core decisions are fakes built on their contracts
+(`tests/telegram_fakes.py`); requests to IAM are checked against the models of the
+neighbouring `../iam-service` when it is present. The core directory in the service
+tests is a fake of the `Directory` protocol; the adapter to the core is pinned by a
+contract test against the Control Plane API models.
+
+## License
+
+Apache License 2.0 — [LICENSE](LICENSE), [NOTICE](NOTICE). Third-party dependencies
+and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md) and `sbom.json`
+(CycloneDX 1.5); both files are generated by `tools/generate_third_party.py` of the
+`taimen` umbrella repository in the service's runtime environment (the service
+itself and the platform packages are first-party and excluded):
+
+```bash
+uv sync --no-dev
+uv run --no-sync python ../tools/generate_third_party.py --component notification-service \
+  --exclude-prefix notification-service --exclude-prefix control-plane --exclude-prefix platform-
+```
