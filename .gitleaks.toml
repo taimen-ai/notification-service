@@ -1,0 +1,16 @@
+# gitleaks: allowlist только для тестовых фикстур (открытая поставка, oss-sync O006).
+# Каждая запись — конкретный файл, проверенный вручную: значения в нём — тестовые
+# константы фейков Bot API, IAM и Control Plane; ни одно не даёт доступа к реальной
+# системе. Ключи подписи токенов тесты генерируют во время прогона, в дереве их нет.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixtures: credentials of in-process fakes"
+paths = [
+  '''^tests/telegram_fakes\.py$''',             # токен бота фейка Bot API, токены фейка IAM
+  '''^tests/test_telegram\.py$''',              # секрет вебхука Telegram
+  '''^tests/test_app\.py$''',                   # client secret service account'а в тестовых настройках
+  '''^tests/test_directory_contract\.py$''',    # ключ cp_test_key в contract-тесте каталога ядра
+  '''^tests/test_decisions_contract\.py$''',    # access token фейка IAM в contract-тесте решений
+]
