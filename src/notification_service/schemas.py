@@ -76,13 +76,14 @@ class Action(ApiModel):
     _plain = field_validator("label")(_no_control_chars)
 
 
-class NotificationCreate(ApiModel):
+class NotificationContent(ApiModel):
+    """A notification without actions: what any sender, a skill too, may send."""
+
     recipient: Recipient
     type: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=MAX_TITLE)
     body: str = Field(default="", max_length=MAX_BODY)
     links: list[Link] = Field(default_factory=list, max_length=10)
-    actions: list[Action] = Field(default_factory=list, max_length=5)
 
     @field_validator("type")
     @classmethod
@@ -102,6 +103,10 @@ class NotificationCreate(ApiModel):
     @classmethod
     def _body_plain(cls, value: str) -> str:
         return _no_control_chars(value)
+
+
+class NotificationCreate(NotificationContent):
+    actions: list[Action] = Field(default_factory=list, max_length=5)
 
 
 class DeliveryOut(ApiModel):

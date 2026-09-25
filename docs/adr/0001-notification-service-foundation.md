@@ -151,6 +151,7 @@ Telegram (N007) — таблицы добавят миграции этих за
 | Метод и путь | Scope |
 |---|---|
 | `POST /notifications` (`Idempotency-Key`) | `notifications:send` |
+| `POST /skills/notify.send` — скилл `notify.send@1` ([ADR-0004](0004-notify-send-skill.md)) | `notifications:send` |
 | `GET /notifications/{id}` — уведомление и журнал доставки | `notifications:send` (своё), `notifications:admin` |
 | `GET /me/notifications` (`unreadOnly`, `limit`, `cursor`) | `notifications:read` |
 | `GET /me/notifications/stream` (SSE, `Last-Event-ID`) | `notifications:read` |
@@ -158,7 +159,8 @@ Telegram (N007) — таблицы добавят миграции этих за
 | `GET`, `PATCH /me/notification-preferences` | `notifications:read` |
 | `GET`, `POST /mandatory-rules`, `DELETE /mandatory-rules/{id}` | `notifications:admin` |
 
-Ошибки — конверт `{"error": {"code", "message", "details"}}`, как в ядре.
+Ошибки — конверт `{"error": {"code", "message", "details"}}`, как в ядре (у маршрута
+скилла — форма skill-sdk с `retryable`, ADR-0004).
 `GET /healthz` — публичный (метка `authz: public` в коде).
 
 ## Последствия

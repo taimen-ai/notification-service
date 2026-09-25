@@ -15,7 +15,9 @@
 (N008, [ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) превращает
 `approval.requested` в уведомление с действиями решения (их закрывает
 `approval.approved|rejected|cancelled`), а `task.verification_failed` — в
-уведомление владельцу задачи.
+уведомление владельцу задачи. Пакеты шлют уведомления скиллом `notify.send@1`
+([ADR-0004](docs/adr/0004-notify-send-skill.md), контракт —
+[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)).
 
 ## Устройство
 
