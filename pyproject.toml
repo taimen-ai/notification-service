@@ -7,7 +7,8 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 dependencies = [
     "alembic>=1.13",
-    "control-plane-client",
+    # [events]: the event consumer SDK — SQL cursor store and WebSocket wake-up.
+    "control-plane-client[events]",
     "fastapi>=0.115",
     "httpx>=0.28",
     "platform-auth-sdk>=0.1.0",

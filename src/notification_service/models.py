@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from control_plane_client.events.sqlalchemy import cursor_tables
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -63,6 +64,12 @@ class Notification(Base):
     body: Mapped[str] = mapped_column(Text, default="")
     links: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     actions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # Set once the actions no longer apply (the decision was taken elsewhere,
+    # the request withdrawn): channels render them inactive, with the outcome.
+    actions_closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    actions_outcome: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -237,3 +244,8 @@ class ChannelAddress(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+# Position and dedup record of the Control Plane event consumer (SDK tables,
+# ``event_cursors`` and ``handled_events``), declared here for the migrations.
+EVENT_CURSORS, HANDLED_EVENTS = cursor_tables(Base.metadata)

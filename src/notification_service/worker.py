@@ -159,7 +159,9 @@ class DeliveryWorker:
                 title=notification.title,
                 body=notification.body,
                 links=list(notification.links),
-                actions=list(notification.actions),
+                # A delivery that goes out after the actions closed (a retry,
+                # quiet hours) carries no buttons that could no longer work.
+                actions=[] if notification.actions_closed_at else list(notification.actions),
                 created_at=notification.created_at,
             )
             # Never outlive the lease: past it the delivery may be someone else's.

@@ -44,6 +44,8 @@ def to_out(item: InboxItem, notification: Notification) -> InboxItemOut:
         body=notification.body,
         links=list(notification.links),
         actions=list(notification.actions),
+        actions_closed_at=notification.actions_closed_at,
+        actions_outcome=notification.actions_outcome,
         sender_id=notification.sender_id,
         created_at=notification.created_at,
         read_at=item.read_at,

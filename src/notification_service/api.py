@@ -68,6 +68,8 @@ def sent_out(notification: Notification, deliveries: list[Delivery]) -> SentNoti
         body=notification.body,
         links=list(notification.links),
         actions=list(notification.actions),
+        actions_closed_at=notification.actions_closed_at,
+        actions_outcome=notification.actions_outcome,
         recipient=Recipient(
             kind=notification.recipient_kind,  # type: ignore[arg-type]
             id=notification.recipient_id,

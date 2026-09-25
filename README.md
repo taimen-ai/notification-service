@@ -8,11 +8,16 @@
 решения самого сервиса — [docs/adr/](docs/adr/). Каркас сервиса — задача N006
 (TASK-000415): отправка с дедупликацией, адресация principal / роль / группа,
 настройки и обязательные правила, воркер доставки с повторами, каналы `web` и
-`email`, веб-инбокс с потоком SSE. Telegram — N007, потребитель событий ядра — N008.
+`email`, веб-инбокс с потоком SSE. Telegram — N007. Потребитель событий ядра
+(N008, [ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) превращает
+`approval.requested` в уведомление с действиями решения (их закрывает
+`approval.approved|rejected|cancelled`), а `task.verification_failed` — в
+уведомление владельцу задачи.
 
 ## Устройство
 
-Один процесс: FastAPI (`/api/v1`) и фоновый воркер доставки, своя PostgreSQL,
+Один процесс: FastAPI (`/api/v1`), фоновый воркер доставки и потребитель
+событий ядра (SDK `control_plane_client.events`), своя PostgreSQL,
 миграции Alembic. Токены проверяет `platform-auth-sdk` (audience
 `notification-service`, scopes `notifications:send|read|admin`); principal'ов,
 роли и привязки к IAM сервис читает у Control Plane своим service account'ом.
@@ -42,9 +47,12 @@ uv run notification-service          # API и воркер, порт NS_PORT (80
 | `NS_EMAIL_MODE` | `smtp`, `log` (staging: только запись в лог) или `disabled` |
 | `NS_EMAIL_FROM`, `NS_SMTP_HOST`, `NS_SMTP_PORT`, `NS_SMTP_STARTTLS`, `NS_SMTP_USERNAME`, `NS_SMTP_PASSWORD` | SMTP |
 | `NS_INBOX_POLL_SECONDS`, `NS_INBOX_KEEPALIVE_SECONDS` | поток SSE инбокса |
+| `NS_EVENTS_ENABLED`, `NS_EVENTS_START`, `NS_EVENTS_WORKSPACE_ID`, `NS_EVENTS_POLL_SECONDS` | потребитель событий ядра: вкл/выкл, откуда начать при первом запуске (`latest` по умолчанию, `earliest`), поддерево workspace (пусто — весь tenant), период опроса |
+| `NS_TASK_URL_TEMPLATE` | ссылка на задачу в уведомлениях из событий, `{taskPublicId}` / `{taskId}`; пусто — без ссылки |
 
 Без настроек IAM сервис отвечает `503` на все маршруты API, без настроек Control
-Plane — `503` на отправку людям и ролям. Секреты — только в окружении или
+Plane — `503` на отправку людям и ролям; потребитель событий работает, когда
+настроены и Control Plane, и IAM. Секреты — только в окружении или
 `secrets/`, не в репозитории.
 
 ## Разработка
