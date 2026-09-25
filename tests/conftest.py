@@ -206,7 +206,10 @@ def harness_factory(
 
     @asynccontextmanager
     async def build(
-        *, settings: Settings | None = None, channels: list[Channel] | None = None
+        *,
+        settings: Settings | None = None,
+        channels: list[Channel] | None = None,
+        **overrides: Any,
     ) -> AsyncIterator[Harness]:
         app = create_app(
             settings or settings_for(),
@@ -215,6 +218,7 @@ def harness_factory(
                 verifier=verifier,
                 directory=directory,
                 extra_channels=channels or [],
+                **overrides,
             ),
         )
         async with app.router.lifespan_context(app):

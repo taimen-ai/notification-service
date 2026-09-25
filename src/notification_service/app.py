@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
+import httpx
 from control_plane_client import ControlPlaneClient
 from control_plane_client.events import EventConsumer
 from fastapi import FastAPI
@@ -25,9 +26,23 @@ from notification_service import errors
 from notification_service.api import router
 from notification_service.channels import Channel, ChannelRegistry
 from notification_service.channels.email import EmailChannel
+from notification_service.channels.telegram import (
+    BotApi,
+    PrincipalNames,
+    TelegramChannel,
+    TelegramMessages,
+)
 from notification_service.channels.web import InboxBroker, WebChannel
 from notification_service.config import Settings, get_settings
 from notification_service.db import create_engine, session_factory
+from notification_service.decisions import (
+    Approvals,
+    ChannelLinks,
+    ControlPlaneApprovals,
+    IamChannelLinks,
+    UnconfiguredApprovals,
+    UnconfiguredChannelLinks,
+)
 from notification_service.directory import (
     ControlPlaneDirectory,
     Directory,
@@ -41,6 +56,8 @@ from notification_service.events import (
     build_consumer,
 )
 from notification_service.sending import NotificationSender
+from notification_service.telegram_bot import TelegramWebhook
+from notification_service.telegram_bot import router as telegram_router
 from notification_service.worker import DeliveryWorker
 
 logger = logging.getLogger("notification_service")
@@ -60,6 +77,12 @@ class Overrides:
     verifier: TokenVerifier | None = None
     directory: Directory | None = None
     extra_channels: list[Channel] = field(default_factory=list)
+    # Telegram: the Bot API transport (a fake in tests), the IAM channel-link
+    # and Control Plane approval adapters, principal display names.
+    telegram_transport: httpx.AsyncBaseTransport | None = None
+    channel_links: ChannelLinks | None = None
+    approvals: Approvals | None = None
+    principal_names: PrincipalNames | None = None
 
 
 def build_verifier(settings: Settings) -> TokenVerifier | None:
@@ -121,6 +144,33 @@ def build_event_consumer(
     return build_consumer(settings, connection.client, engine, handler)
 
 
+def build_channel_links(settings: Settings) -> IamChannelLinks | None:
+    """The service as a channel adapter at IAM (its own audience-``iam`` token)."""
+    secret = settings.service_client_secret.get_secret_value()
+    if not (
+        settings.iam_url
+        and settings.service_client_id
+        and secret
+        and settings.jwks_url
+        and settings.iam_issuer
+    ):
+        return None
+    tokens = ServiceTokenProvider(
+        settings.iam_url,
+        ServiceCredentials(
+            settings.service_client_id,
+            secret,
+            settings.iam_channel_audience,
+            (settings.iam_channel_scope,),
+        ),
+    )
+    verifier = TokenVerifier(
+        JwksCache(settings.jwks_url),
+        VerifierConfig(issuer=settings.iam_issuer, audience=settings.iam_channel_audience),
+    )
+    return IamChannelLinks(settings.iam_url, tokens, verifier)
+
+
 async def run_event_consumer(consumer: EventConsumer) -> None:
     try:
         await consumer.run()
@@ -145,6 +195,19 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
         channels: list[Channel] = [WebChannel(sessions, broker)]
         if settings.email_mode != "disabled":
             channels.append(EmailChannel(settings))
+        bot_token = settings.telegram_bot_token.get_secret_value()
+        bot = (
+            BotApi(
+                settings.telegram_api_url,
+                bot_token,
+                timeout=settings.telegram_timeout_seconds,
+                transport=overrides.telegram_transport,
+            )
+            if bot_token
+            else None
+        )
+        if bot is not None:
+            channels.append(TelegramChannel(sessions, bot))
         registry = ChannelRegistry([*channels, *overrides.extra_channels])
 
         connection = connect_control_plane(settings)
@@ -163,8 +226,40 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
         app.state.channels = registry
         app.state.worker = worker
         app.state.verifier = overrides.verifier or build_verifier(settings)
-        sender = NotificationSender(sessions, directory, registry, on_accepted=worker.wake)
+        names = overrides.principal_names or (
+            ControlPlaneCore(connection.client).principal_name if connection is not None else None
+        )
+        messages = TelegramMessages(sessions, bot, names=names) if bot is not None else None
+        sender = NotificationSender(
+            sessions,
+            directory,
+            registry,
+            on_accepted=worker.wake,
+            on_actions_closed=messages.actions_closed if messages is not None else None,
+        )
         app.state.sender = sender
+        own_links = None
+        telegram = None
+        if bot is not None and messages is not None:
+            links = overrides.channel_links
+            if links is None:
+                own_links = build_channel_links(settings)
+                links = own_links or UnconfiguredChannelLinks()
+            approvals = overrides.approvals or (
+                ControlPlaneApprovals(settings.control_plane_url, connection.client)
+                if connection is not None
+                else UnconfiguredApprovals()
+            )
+            telegram = TelegramWebhook(
+                settings=settings,
+                sessions=sessions,
+                bot=bot,
+                messages=messages,
+                sender=sender,
+                links=links,
+                approvals=approvals,
+            )
+        app.state.telegram = telegram
         consumer = (
             build_event_consumer(settings, connection, engine, sender)
             if connection is not None
@@ -191,6 +286,10 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
             if connection is not None:
                 await connection.client.aclose()
                 await connection.tokens.aclose()
+            if own_links is not None:
+                await own_links.aclose()
+            if bot is not None:
+                await bot.aclose()
             if overrides.engine is None:
                 await engine.dispose()
 
@@ -203,6 +302,7 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
     )
     errors.install(app)
     app.include_router(router)
+    app.include_router(telegram_router)
 
     # authz: public — liveness probe, reveals nothing.
     @app.get("/healthz", include_in_schema=False)

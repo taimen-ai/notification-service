@@ -143,7 +143,8 @@ tenant не получает уведомление даже при общем p
 Из перечня плана пока не созданы `event_cursors` и `callbacks`: их форма
 определяется SDK потребителя событий (N003, хранилище курсора) и кнопками
 Telegram (N007) — таблицы добавят миграции этих задач (`event_cursors` и
-`handled_events` — миграция `0002`, [ADR-0002](0002-control-plane-event-consumer.md)).
+`handled_events` — миграция `0002`, [ADR-0002](0002-control-plane-event-consumer.md);
+`callbacks` — `channel_callbacks` миграции `0003`, [ADR-0003](0003-telegram-channel-and-decisions.md)).
 
 ### API (`/api/v1`)
 
@@ -169,7 +170,8 @@ Telegram (N007) — таблицы добавят миграции этих за
   с тем же тестом. (Маршрут появился в N002: ответ — страница `RoleHolderOut`,
   адаптер вызывает `ControlPlaneClient.list_role_holders`, см. ADR-0002.)
 - Эндпоинты привязки групп (`/workspaces/{id}/channel-groups`) и Telegram — N007;
-  здесь группы только читаются при адресации.
+  здесь группы только читаются при адресации. (Сделаны в N007, см.
+  [ADR-0003](0003-telegram-channel-and-decisions.md).)
 - Почтовый адрес не подтверждается: получатель может направить свои же
   уведомления на чужой ящик. Подтверждение адреса — отдельная задача, если
   почта станет основным каналом.

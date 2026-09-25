@@ -249,3 +249,41 @@ class PreferencesOut(ApiModel):
     quiet_hours: QuietHoursOut | None
     addresses: list[ChannelAddressOut]
     mandatory: list[MandatoryRuleOut]
+
+
+# --- Channel groups --------------------------------------------------------------
+
+
+class ChannelGroupCreate(ApiModel):
+    """Bind a group chat to the workspace (and, optionally, to a role in it)."""
+
+    channel: str = Field(default="telegram", min_length=1, max_length=30)
+    role_id: uuid.UUID | None = None
+
+
+class ChannelGroupIntentOut(ApiModel):
+    """The one-time code to send to the bot in the group; shown only here."""
+
+    id: uuid.UUID
+    channel: str
+    workspace_id: uuid.UUID
+    role_id: uuid.UUID | None
+    code: str
+    # What to send in the group, and a link that adds the bot and sends it
+    # (when the bot's username is configured).
+    command: str
+    deep_link: str | None
+    expires_at: datetime
+
+
+class ChannelGroupOut(ApiModel):
+    id: uuid.UUID
+    channel: str
+    external_chat_id: str
+    title: str
+    workspace_id: uuid.UUID
+    role_id: uuid.UUID | None
+    linked_by: uuid.UUID
+    created_at: datetime
+    disabled_at: datetime | None
+    disabled_reason: str | None
