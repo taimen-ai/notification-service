@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     service_client_id: str = ""
     service_client_secret: SecretStr = SecretStr("")
 
+    # Consumer of Control Plane events (decisions requested and closed, failed
+    # verifications). ``latest`` on the very first start: a new installation
+    # does not notify about the history of the journal.
+    events_enabled: bool = True
+    events_start: Literal["earliest", "latest"] = "latest"
+    events_workspace_id: str = ""
+    events_poll_seconds: float = 30.0
+    # Link to a task in the notifications the consumer builds, e.g.
+    # ``https://console.example/tasks/{taskPublicId}`` (also ``{taskId}``);
+    # empty — no link.
+    task_url_template: str = ""
+
     # Delivery worker.
     worker_enabled: bool = True
     worker_poll_seconds: float = 1.0

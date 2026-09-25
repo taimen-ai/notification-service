@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 import pytest
-from control_plane.api.v1.schemas import IamBindingOut, PageOut, PrincipalOut
+from control_plane.api.v1.schemas import IamBindingOut, PageOut, RoleHolderOut
 from control_plane_client import ControlPlaneClient
 
 from notification_service.directory import (
@@ -46,16 +46,10 @@ def binding(principal_id: uuid.UUID, iam_tenant: uuid.UUID, **fields: Any) -> di
     return IamBindingOut(**values).model_dump(mode="json", by_alias=True)
 
 
-def principal(principal_id: uuid.UUID, status: str = "active") -> dict[str, Any]:
-    return PrincipalOut(
-        id=principal_id,
-        tenant_id=uuid.uuid4(),
-        kind="human",
-        display_name="Someone",
-        status=status,
-        metadata_json={},
-        created_at=NOW,
-        updated_at=NOW,
+def holder(principal_id: uuid.UUID, status: str = "active") -> dict[str, Any]:
+    """An item of ``GET /roles/{id}/principals`` as the core serializes it."""
+    return RoleHolderOut(
+        id=principal_id, kind="human", display_name="Someone", status=status
     ).model_dump(mode="json", by_alias=True)
 
 
@@ -129,8 +123,8 @@ async def test_role_holders_follow_pages_and_skip_inactive() -> None:
     tenant, role, workspace = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     alice, bob, gone = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     pages = {
-        None: page([principal(alice), principal(gone, status="disabled")], "c2"),
-        "c2": page([principal(bob)]),
+        None: page([holder(alice), holder(gone, status="disabled")], "c2"),
+        "c2": page([holder(bob)]),
     }
     requests: list[httpx.Request] = []
 

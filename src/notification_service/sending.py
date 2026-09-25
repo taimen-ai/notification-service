@@ -16,6 +16,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time
+from typing import Any
 
 from platform_auth import TrustedAuthContext
 from sqlalchemy import select
@@ -112,6 +113,36 @@ class NotificationSender:
         if self._on_accepted is not None:
             self._on_accepted()
         return accepted
+
+    async def close_actions(
+        self,
+        tenant_id: uuid.UUID,
+        sender_id: uuid.UUID,
+        dedup_key: str,
+        outcome: dict[str, Any],
+    ) -> Notification | None:
+        """Mark the actions of the sender's notification ``dedup_key`` as no longer valid.
+
+        The first closure wins: a repeated or late one (a decision event read
+        again) leaves the recorded outcome as it is. ``None`` — no such
+        notification (it was never sent, e.g. before the consumer started).
+        """
+        async with transaction(self._sessions) as session:
+            notification = await session.scalar(
+                select(Notification)
+                .where(
+                    Notification.tenant_id == tenant_id,
+                    Notification.sender_id == sender_id,
+                    Notification.dedup_key == dedup_key,
+                )
+                .with_for_update()
+            )
+            if notification is None:
+                return None
+            if notification.actions_closed_at is None:
+                notification.actions_closed_at = utcnow()
+                notification.actions_outcome = outcome
+            return notification
 
     async def _replay(
         self, session: AsyncSession, ctx: TrustedAuthContext, dedup_key: str, digest: str

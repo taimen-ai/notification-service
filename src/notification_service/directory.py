@@ -115,18 +115,15 @@ class ControlPlaneDirectory:
     async def _role_principals(
         self, role_id: uuid.UUID, workspace_id: uuid.UUID
     ) -> list[dict[str, Any]]:
-        # ``GET /roles/{id}/principals?workspaceId=`` (plan of the notifications
-        # feature, task N002): a page of ``PrincipalOut``. The client has no
-        # method for it yet, hence the transport call.
+        # ``GET /roles/{id}/principals?workspaceId=``: pages of ``RoleHolderOut``
+        # — the principals eligible to decide an approval requiring the role there.
         items: list[dict[str, Any]] = []
         cursor: str | None = None
         while True:
-            params: dict[str, Any] = {"workspaceId": str(workspace_id)}
-            if cursor:
-                params["cursor"] = cursor
+            params: dict[str, Any] = {"cursor": cursor} if cursor else {}
             try:
-                page = await self._client._request(
-                    "GET", f"/roles/{role_id}/principals", params=params
+                page = await self._client.list_role_holders(
+                    str(role_id), workspace_id=str(workspace_id), **params
                 )
             except NotFoundError as exc:
                 raise UnknownRecipient(f"role {role_id}") from exc

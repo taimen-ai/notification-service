@@ -124,6 +124,10 @@ class NotificationOut(ApiModel):
     body: str
     links: list[dict[str, Any]]
     actions: list[dict[str, Any]]
+    # When the actions stopped applying and why (e.g. ``{"status": "approved"}``);
+    # ``null`` while they are open.
+    actions_closed_at: datetime | None = None
+    actions_outcome: dict[str, Any] | None = None
     recipient: Recipient
     sender_id: uuid.UUID
     created_at: datetime
@@ -145,6 +149,8 @@ class InboxItemOut(ApiModel):
     body: str
     links: list[dict[str, Any]]
     actions: list[dict[str, Any]]
+    actions_closed_at: datetime | None = None
+    actions_outcome: dict[str, Any] | None = None
     sender_id: uuid.UUID
     created_at: datetime
     read_at: datetime | None

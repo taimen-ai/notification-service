@@ -240,6 +240,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.6" },
     { name = "types-jsonschema", specifier = ">=4.26.0.20260518" },
     { name = "types-regex", specifier = ">=2026.9.10.20260911" },
@@ -254,8 +255,21 @@ dependencies = [
     { name = "httpx" },
 ]
 
+[package.optional-dependencies]
+events = [
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "websockets" },
+]
+
 [package.metadata]
-requires-dist = [{ name = "httpx", specifier = ">=0.28.1" }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'events'", specifier = ">=2.0.35" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'sqlalchemy'", specifier = ">=2.0.35" },
+    { name = "websockets", marker = "extra == 'events'", specifier = ">=13.0" },
+    { name = "websockets", marker = "extra == 'ws'", specifier = ">=13.0" },
+]
+provides-extras = ["ws", "sqlalchemy", "events"]
 
 [[package]]
 name = "cryptography"
@@ -688,7 +702,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "control-plane-client" },
+    { name = "control-plane-client", extra = ["events"] },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "platform-auth-sdk" },
@@ -712,7 +726,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
-    { name = "control-plane-client", editable = "../control-plane/client" },
+    { name = "control-plane-client", extras = ["events"], editable = "../control-plane/client" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "platform-auth-sdk", editable = "../platform-auth-sdk" },
