@@ -113,3 +113,10 @@ async def test_event_consumer_is_built_only_with_control_plane_and_iam(engine: A
     finally:
         await connection.client.aclose()
         await connection.tokens.aclose()
+
+
+def test_core_token_asks_for_the_read_scope() -> None:
+    """Without a scope in the exchange the core refuses every read (insufficient_scope)."""
+    from notification_service.app import CONTROL_PLANE_SCOPES
+
+    assert CONTROL_PLANE_SCOPES == ("control-plane:read",)

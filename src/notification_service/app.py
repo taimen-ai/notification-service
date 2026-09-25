@@ -46,6 +46,9 @@ from notification_service.worker import DeliveryWorker
 logger = logging.getLogger("notification_service")
 
 CONTROL_PLANE_AUDIENCE = "control-plane"
+# The core's read scope: without a scope in the exchange IAM issues a token that
+# carries none, and every read of the core answers insufficient_scope.
+CONTROL_PLANE_SCOPES = ("control-plane:read",)
 CONSUMER_STOP_SECONDS = 10.0
 
 
@@ -82,7 +85,9 @@ def connect_control_plane(settings: Settings) -> ControlPlaneConnection | None:
         return None
     tokens = ServiceTokenProvider(
         settings.iam_url,
-        ServiceCredentials(settings.service_client_id, secret, CONTROL_PLANE_AUDIENCE),
+        ServiceCredentials(
+            settings.service_client_id, secret, CONTROL_PLANE_AUDIENCE, CONTROL_PLANE_SCOPES
+        ),
     )
     client = ControlPlaneClient(
         settings.control_plane_url,
