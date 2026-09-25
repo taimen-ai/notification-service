@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Header, Query, Request, Response
@@ -20,6 +21,8 @@ from notification_service.db import transaction, utcnow
 from notification_service.errors import NotFound, Unprocessable
 from notification_service.models import (
     ChannelAddress,
+    ChannelGroup,
+    ChannelGroupIntent,
     Delivery,
     MandatoryRule,
     Notification,
@@ -28,6 +31,9 @@ from notification_service.models import (
 )
 from notification_service.schemas import (
     ChannelAddressOut,
+    ChannelGroupCreate,
+    ChannelGroupIntentOut,
+    ChannelGroupOut,
     DeliveryOut,
     InboxItemOut,
     InboxPageOut,
@@ -43,6 +49,7 @@ from notification_service.schemas import (
     SentNotificationOut,
 )
 from notification_service.sending import NotificationSender, load_deliveries
+from notification_service.telegram_bot import hash_code, new_group_code
 
 router = APIRouter(prefix="/api/v1")
 EMAIL = "email"
@@ -425,4 +432,91 @@ async def delete_rule(rule_id: uuid.UUID, request: Request, ctx: Admin) -> Respo
         )
     if not result.rowcount:  # type: ignore[attr-defined]
         raise NotFound("mandatory rule not found")
+    return Response(status_code=204)
+
+
+# --- Channel groups ------------------------------------------------------------
+
+
+@router.post(
+    "/workspaces/{workspace_id}/channel-groups",
+    response_model=ChannelGroupIntentOut,
+    status_code=201,
+    summary="Get a one-time code that binds a group chat to the workspace (and role)",
+)
+async def create_channel_group(
+    workspace_id: uuid.UUID, payload: ChannelGroupCreate, request: Request, ctx: Admin
+) -> ChannelGroupIntentOut:
+    _require_channel(request, payload.channel)
+    settings: Settings = request.app.state.settings
+    code = new_group_code()
+    now = utcnow()
+    intent = ChannelGroupIntent(
+        id=uuid.uuid4(),
+        tenant_id=ctx.tenant_id,
+        channel=payload.channel,
+        code_hash=hash_code(code),
+        workspace_id=workspace_id,
+        role_id=payload.role_id,
+        created_by=ctx.principal_id,
+        created_at=now,
+        expires_at=now + timedelta(seconds=settings.channel_group_code_ttl_seconds),
+    )
+    async with transaction(_sessions(request)) as session:
+        session.add(intent)
+    bot = settings.telegram_bot_username.lstrip("@")
+    return ChannelGroupIntentOut(
+        id=intent.id,
+        channel=intent.channel,
+        workspace_id=workspace_id,
+        role_id=intent.role_id,
+        code=code,
+        # In a group a command reaches a bot in privacy mode only when it is
+        # addressed to it.
+        command=f"/start@{bot} {code}" if bot else f"/start {code}",
+        deep_link=f"https://t.me/{bot}?startgroup={code}" if bot else None,
+        expires_at=intent.expires_at,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/channel-groups",
+    response_model=list[ChannelGroupOut],
+    summary="Group chats bound to the workspace, including disabled ones",
+)
+async def list_channel_groups(
+    workspace_id: uuid.UUID, request: Request, ctx: Admin
+) -> list[ChannelGroupOut]:
+    async with _sessions(request)() as session:
+        rows = await session.scalars(
+            select(ChannelGroup)
+            .where(
+                ChannelGroup.tenant_id == ctx.tenant_id, ChannelGroup.workspace_id == workspace_id
+            )
+            .order_by(ChannelGroup.created_at)
+        )
+        return [ChannelGroupOut.model_validate(row) for row in rows]
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/channel-groups/{group_id}",
+    status_code=204,
+    summary="Unbind a group chat: nothing more is delivered there",
+)
+async def delete_channel_group(
+    workspace_id: uuid.UUID, group_id: uuid.UUID, request: Request, ctx: Admin
+) -> Response:
+    async with transaction(_sessions(request)) as session:
+        group = await session.scalar(
+            select(ChannelGroup).where(
+                ChannelGroup.id == group_id,
+                ChannelGroup.tenant_id == ctx.tenant_id,
+                ChannelGroup.workspace_id == workspace_id,
+            )
+        )
+        if group is None:
+            raise NotFound("channel group not found")
+        if group.disabled_at is None:
+            group.disabled_at = utcnow()
+            group.disabled_reason = "unlinked_by_admin"
     return Response(status_code=204)

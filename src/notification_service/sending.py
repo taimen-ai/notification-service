@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, time
 from typing import Any
@@ -47,6 +48,8 @@ from notification_service.routing import (
     select_channels,
 )
 from notification_service.schemas import NotificationCreate
+
+logger = logging.getLogger("notification_service.sending")
 
 WEB = "web"
 
@@ -83,11 +86,13 @@ class NotificationSender:
         channels: ChannelRegistry,
         *,
         on_accepted: Callable[[], None] | None = None,
+        on_actions_closed: Callable[[Notification], Awaitable[None]] | None = None,
     ) -> None:
         self._sessions = sessions
         self._directory = directory
         self._channels = channels
         self._on_accepted = on_accepted
+        self._on_actions_closed = on_actions_closed
 
     async def accept(
         self, ctx: TrustedAuthContext, payload: NotificationCreate, dedup_key: str
@@ -126,7 +131,10 @@ class NotificationSender:
         The first closure wins: a repeated or late one (a decision event read
         again) leaves the recorded outcome as it is. ``None`` — no such
         notification (it was never sent, e.g. before the consumer started).
+        The closure that wins tells the channels (``on_actions_closed``), so
+        messages already sent stop offering the actions.
         """
+        closed_now = False
         async with transaction(self._sessions) as session:
             notification = await session.scalar(
                 select(Notification)
@@ -142,7 +150,15 @@ class NotificationSender:
             if notification.actions_closed_at is None:
                 notification.actions_closed_at = utcnow()
                 notification.actions_outcome = outcome
-            return notification
+                closed_now = True
+        if closed_now and self._on_actions_closed is not None:
+            try:
+                await self._on_actions_closed(notification)
+            except Exception:
+                # The closure is recorded; a message left with its buttons
+                # still answers a press with the outcome.
+                logger.exception("notification %s: channels not told of closure", notification.id)
+        return notification
 
     async def _replay(
         self, session: AsyncSession, ctx: TrustedAuthContext, dedup_key: str, digest: str

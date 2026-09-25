@@ -59,6 +59,22 @@ class Settings(BaseSettings):
     smtp_password: SecretStr = SecretStr("")
     smtp_timeout_seconds: float = 10.0
 
+    # Telegram channel (Bot API). Without a bot token the channel is not
+    # configured; without the webhook secret the webhook refuses every call.
+    telegram_bot_token: SecretStr = SecretStr("")
+    telegram_webhook_secret: SecretStr = SecretStr("")
+    telegram_api_url: str = "https://api.telegram.org"
+    # The bot's @username without "@": deep links in group binding codes.
+    telegram_bot_username: str = ""
+    telegram_timeout_seconds: float = 10.0
+    # How long a group binding code issued to an administrator is valid.
+    channel_group_code_ttl_seconds: int = 600
+
+    # The service's identity towards IAM as a channel adapter: confirming links
+    # and exchanging channel assertions (``iam:channel-links`` in audience ``iam``).
+    iam_channel_audience: str = "iam"
+    iam_channel_scope: str = "iam:channel-links"
+
     # Web inbox stream: how often an idle stream re-checks the database (a
     # fallback for deliveries made by another process) and sends a keep-alive.
     inbox_poll_seconds: float = 5.0

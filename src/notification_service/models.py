@@ -76,8 +76,9 @@ class Notification(Base):
 class ChannelGroup(Base):
     """A group chat of a messenger bound to a workspace, optionally to a role.
 
-    Rows are created by the channel adapter that verifies the chat (Telegram,
-    N007); addressing only reads them.
+    Rows are created by the channel adapter that verifies the chat: an
+    administrator gets a one-time code (``ChannelGroupIntent``) and sends it to
+    the bot in the group. A removed bot or an unbinding disables the row.
     """
 
     __tablename__ = "channel_groups"
@@ -104,6 +105,54 @@ class ChannelGroup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     disabled_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class ChannelGroupIntent(Base):
+    """A one-time code an administrator sends to the bot in a group to bind it."""
+
+    __tablename__ = "channel_group_intents"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    channel: Mapped[str] = mapped_column(String(30))
+    # Only the hash is kept: the code is shown to the administrator once.
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    role_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("channel_groups.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class ChannelCallback(Base):
+    """A press of an action button, keyed by the channel's own callback id.
+
+    A redelivered callback finds its row and gets the recorded answer instead
+    of a second decision; the decision itself also carries the callback id as
+    its ``Idempotency-Key``.
+    """
+
+    __tablename__ = "channel_callbacks"
+
+    channel: Mapped[str] = mapped_column(String(30), primary_key=True)
+    callback_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    notification_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("notifications.id", ondelete="CASCADE")
+    )
+    action_id: Mapped[str] = mapped_column(String(64))
+    external_subject: Mapped[str] = mapped_column(String(200))
+    iam_principal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    # ``None`` while in flight; then the outcome code (``decided``,
+    # ``already_decided``, ``not_eligible``, ...) and what the person was told.
+    result: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    answer: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Delivery(Base):
@@ -227,13 +276,16 @@ class QuietHours(Base):
 
 
 class ChannelAddress(Base):
-    """Where a recipient is reached on an address-based channel (email).
+    """Where a recipient is reached on an address-based channel (email, Telegram).
 
     A channel that reports the address as unreachable disables it; setting the
-    address again re-enables it.
+    address again re-enables it. The ``telegram`` address is the private chat
+    with the bot, whose id is the person's Telegram user id: the webhook finds
+    the person who pressed a button by it.
     """
 
     __tablename__ = "channel_addresses"
+    __table_args__ = (Index("ix_channel_addresses_channel_address", "channel", "address"),)
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     principal_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
