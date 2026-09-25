@@ -56,6 +56,7 @@ from notification_service.events import (
     build_consumer,
 )
 from notification_service.sending import NotificationSender
+from notification_service.skill import router as skill_router
 from notification_service.telegram_bot import TelegramWebhook
 from notification_service.telegram_bot import router as telegram_router
 from notification_service.worker import DeliveryWorker
@@ -302,6 +303,7 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
     )
     errors.install(app)
     app.include_router(router)
+    app.include_router(skill_router)
     app.include_router(telegram_router)
 
     # authz: public — liveness probe, reveals nothing.

@@ -1,0 +1,180 @@
+{
+  "name": "notify.send",
+  "version": "1",
+  "description": "Send a notification to a principal, a role in a workspace or a group.",
+  "sideEffects": "external_write",
+  "riskLevel": "low",
+  "contract": {
+    "inputs": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$defs": {
+        "Link": {
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Label",
+              "type": "string"
+            },
+            "url": {
+              "format": "uri",
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "url"
+          ],
+          "title": "Link",
+          "type": "object"
+        },
+        "Recipient": {
+          "additionalProperties": false,
+          "description": "Who is addressed: a Control Plane principal, a role in a workspace or a group.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "principal",
+                "role",
+                "group"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "id": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            },
+            "workspaceId": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Workspaceid"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "title": "Recipient",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "description": "A notification without actions: what any sender, a skill too, may send.",
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/Recipient"
+        },
+        "type": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "body": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Body",
+          "type": "string"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/Link"
+          },
+          "maxItems": 10,
+          "title": "Links",
+          "type": "array"
+        }
+      },
+      "required": [
+        "recipient",
+        "type",
+        "title"
+      ],
+      "title": "NotificationContent",
+      "type": "object"
+    },
+    "outputs": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$defs": {
+        "DeliveryState": {
+          "additionalProperties": false,
+          "properties": {
+            "channel": {
+              "title": "Channel",
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "sending",
+                "delivered",
+                "failed"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "channel",
+            "status"
+          ],
+          "title": "DeliveryState",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "notificationId": {
+          "format": "uuid",
+          "title": "Notificationid",
+          "type": "string"
+        },
+        "deliveries": {
+          "items": {
+            "$ref": "#/$defs/DeliveryState"
+          },
+          "title": "Deliveries",
+          "type": "array"
+        }
+      },
+      "required": [
+        "notificationId",
+        "deliveries"
+      ],
+      "title": "NotifySendOutputs",
+      "type": "object"
+    },
+    "timeoutSeconds": 30,
+    "retryPolicy": {
+      "maxAttempts": 3,
+      "backoffSeconds": 10
+    },
+    "idempotency": "required",
+    "implementation": {
+      "protocol": "http",
+      "endpoint": "${NOTIFICATION_SERVICE_URL}/api/v1/skills/notify.send",
+      "auth": {
+        "audience": "notification-service"
+      }
+    }
+  }
+}
