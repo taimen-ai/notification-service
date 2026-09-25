@@ -26,7 +26,7 @@ from control_plane.domain.skill_contract import (
 from control_plane_agent.skills import EndpointPolicy, HttpProtocol, SkillCall, SkillFailure
 from sqlalchemy import func, select
 
-from notification_service.auth import SCOPE_READ
+from notification_service.auth import SCOPE_READ, SCOPE_SEND
 from notification_service.models import Notification
 from notification_service.skill import (
     ENDPOINT_PLACEHOLDER,
@@ -301,7 +301,7 @@ def test_the_contract_passes_the_cores_publication_rules() -> None:
 
     assert side_effects == "external_write"
     assert contract["idempotency"] == "required"
-    assert contract["implementation"]["auth"] == {"audience": AUDIENCE}
+    assert contract["implementation"]["auth"] == {"audience": AUDIENCE, "scopes": [SCOPE_SEND]}
 
 
 def test_the_documented_contract_is_the_published_one() -> None:
