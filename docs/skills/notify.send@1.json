@@ -173,7 +173,10 @@
       "protocol": "http",
       "endpoint": "${NOTIFICATION_SERVICE_URL}/api/v1/skills/notify.send",
       "auth": {
-        "audience": "notification-service"
+        "audience": "notification-service",
+        "scopes": [
+          "notifications:send"
+        ]
       }
     }
   }

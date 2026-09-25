@@ -170,7 +170,9 @@ def publication(endpoint: str, audience: str = "notification-service") -> dict[s
             "implementation": {
                 "protocol": "http",
                 "endpoint": endpoint,
-                "auth": {"audience": audience},
+                # The executor asks IAM for exactly these scopes; the ceiling of
+                # its PAT still bounds them (CP-ADR-0056 amendment M2.2).
+                "auth": {"audience": audience, "scopes": [SCOPE_SEND]},
             },
         },
     }
