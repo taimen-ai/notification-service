@@ -16,6 +16,12 @@ with (``X-Telegram-Bot-Api-Secret-Token``). What an update can do:
   the assertion is exchanged at IAM for the person's one-decision token, and
   the approval is decided in the core with ``Idempotency-Key`` = callback id;
   every message of the notification is then updated with the outcome;
+- free text in the private chat of a linked person — handed to the launcher of
+  personal harnesses as a message of the person's assistant conversation
+  (TAI-ADR-0051 §7); an unlinked account's text goes no further than here;
+- a press of a harness confirmation button (``data.kind = "harness_approval"``)
+  — the same way, as the answer to the harness's confirmation request; a
+  redelivered press is recorded once;
 - the bot blocked by the person or removed from a group — the address or the
   group is disabled until it is linked again.
 """
@@ -45,6 +51,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from notification_service.channels.telegram import (
     DECIDE,
+    HARNESS_APPROVAL,
     TELEGRAM,
     BotApi,
     TelegramApiError,
@@ -63,6 +70,7 @@ from notification_service.decisions import (
     purpose_ref,
 )
 from notification_service.errors import envelope
+from notification_service.harness import HarnessInbound, UnconfiguredHarness
 from notification_service.models import (
     ChannelAddress,
     ChannelCallback,
@@ -99,6 +107,13 @@ LINK_REFUSALS = {
     "rate_limited": "Слишком много попыток. Попробуйте позже.",
 }
 UNAVAILABLE = "Сервис сейчас недоступен. Попробуйте позже."
+NOT_LINKED_TEXT = (
+    "Этот Telegram не привязан к учётной записи — сообщение никуда не передано. "
+    "Привяжите его кодом из веб-интерфейса: /start <код>."
+)
+ASSISTANT_UNAVAILABLE = "Ассистент сейчас недоступен. Попробуйте позже."
+NO_ASSISTANT = "У вашей учётной записи нет рабочего места с ассистентом."
+MAX_INBOUND_TEXT = 4000
 
 
 def hash_code(code: str) -> str:
@@ -143,7 +158,9 @@ class TelegramWebhook:
         sender: NotificationSender,
         links: ChannelLinks,
         approvals: Approvals,
+        harness: HarnessInbound | None = None,
     ) -> None:
+        self._harness: HarnessInbound = harness or UnconfiguredHarness()
         self._secret = settings.telegram_webhook_secret.get_secret_value()
         self._sessions = sessions
         self._bot = bot
@@ -174,9 +191,14 @@ class TelegramWebhook:
         if message.get("migrate_to_chat_id") is not None:
             await self._migrated(chat_id, str(message["migrate_to_chat_id"]))
             return
-        parsed = parse_command(str(message.get("text") or ""))
+        text = str(message.get("text") or "")
+        parsed = parse_command(text)
         user = message.get("from") or {}
-        if parsed is None or not chat_id or user.get("is_bot"):
+        if not chat_id or user.get("is_bot"):
+            return
+        if parsed is None:
+            if chat.get("type") == PRIVATE and text.strip():
+                await self._free_text(chat_id, message, text)
             return
         command, argument = parsed
         if chat.get("type") == PRIVATE:
@@ -192,6 +214,44 @@ class TelegramWebhook:
             await self._reply(
                 chat_id, await self._bind_group(chat_id, str(chat.get("title") or ""), argument)
             )
+
+    async def _linked(self, chat_id: str) -> ChannelAddress | None:
+        """The person this private chat belongs to (the most recently linked address)."""
+        async with self._sessions() as session:
+            return await session.scalar(
+                select(ChannelAddress)
+                .where(
+                    ChannelAddress.channel == TELEGRAM,
+                    ChannelAddress.address == chat_id,
+                    ChannelAddress.disabled_at.is_(None),
+                )
+                .order_by(ChannelAddress.updated_at.desc())
+                .limit(1)
+            )
+
+    async def _free_text(self, chat_id: str, message: dict[str, Any], text: str) -> None:
+        """Text to the assistant: only a linked person's, only as their conversation."""
+        address = await self._linked(chat_id)
+        if address is None:
+            await self._reply(chat_id, NOT_LINKED_TEXT)
+            return
+        delivered = await self._harness.deliver(
+            address.principal_id,
+            {
+                "channel": TELEGRAM,
+                "messageId": f"{chat_id}:{message.get('message_id')}",
+                "text": text[:MAX_INBOUND_TEXT],
+            },
+        )
+        if delivered == "accepted":
+            # The assistant answers through notify.send once its turn is done.
+            return
+        if delivered == "unconfigured":
+            await self._reply(chat_id, HELP)
+        elif delivered == "no_harness":
+            await self._reply(chat_id, NO_ASSISTANT)
+        else:
+            await self._reply(chat_id, ASSISTANT_UNAVAILABLE)
 
     async def _link_person(self, chat_id: str, code: str) -> str:
         # In a private chat the chat id is the person's Telegram user id: the
@@ -396,7 +456,11 @@ class TelegramWebhook:
             await self._answer(callback_id, recorded.answer or "", alert=False)
             return
 
-        verdict = await self._decide(callback_id, user_id, notification, action)
+        if (action.get("data") or {}).get("kind") == HARNESS_APPROVAL:
+            chat_id = str(((query.get("message") or {}).get("chat") or {}).get("id") or "")
+            verdict = await self._confirm(callback_id, user_id, chat_id, notification, action)
+        else:
+            verdict = await self._decide(callback_id, user_id, notification, action)
         async with transaction(self._sessions) as session:
             await session.execute(
                 update(ChannelCallback)
@@ -442,11 +506,18 @@ class TelegramWebhook:
             )
         action = notification.actions[index]
         data = action.get("data") or {}
-        if (
-            sent_here is None
-            or data.get("kind") != DECIDE
-            or data.get("decision") not in ("approve", "reject")
-        ):
+        if sent_here is None:
+            return None
+        if data.get("kind") == HARNESS_APPROVAL:
+            request_id = data.get("requestId")
+            if (
+                isinstance(request_id, str)
+                and 0 < len(request_id) <= 200
+                and data.get("decision") in ("approve", "reject")
+            ):
+                return notification, action
+            return None
+        if data.get("kind") != DECIDE or data.get("decision") not in ("approve", "reject"):
             return None
         try:
             uuid.UUID(str(data.get("approvalId")))
@@ -559,6 +630,57 @@ class TelegramWebhook:
             alert=False,
             outcome=outcome,
         )
+
+    async def _confirm(
+        self,
+        callback_id: str,
+        user_id: str,
+        chat_id: str,
+        notification: Notification,
+        action: dict[str, Any],
+    ) -> Verdict:
+        """A press of the harness's confirmation: only in the person's own private chat.
+
+        The message was delivered to this chat (``_target`` checked the delivery),
+        and a private chat's id is its person's Telegram id: pressing here is the
+        addressee answering. In a group a confirmation is never valid.
+        """
+        data = action["data"]
+        approve = data["decision"] == "approve"
+        if notification.recipient_kind != "principal" or chat_id != user_id:
+            return Verdict(
+                "not_eligible", "Это подтверждение адресовано не вам — ответ не передан."
+            )
+        # IAM principal of the linked account (addresses are keyed by it).
+        person = await self._person(notification.tenant_id, user_id)
+        if person is None:
+            return Verdict("not_linked", NOT_LINKED_TEXT)
+        if notification.actions_closed_at is not None:
+            return await self._already(notification.actions_outcome)
+        delivered = await self._harness.deliver(
+            person,
+            {
+                "channel": TELEGRAM,
+                "messageId": callback_id,
+                "approval": {"id": data["requestId"], "decision": data["decision"]},
+            },
+        )
+        if delivered == "accepted":
+            return Verdict(
+                "decided",
+                "Ответ передан ассистенту: " + ("разрешено." if approve else "отклонено."),
+                alert=False,
+                outcome={
+                    "status": "approved" if approve else "rejected",
+                    "by": str(person),
+                    "channel": TELEGRAM,
+                    "at": utcnow().isoformat(),
+                },
+            )
+        if delivered == "no_harness":
+            return Verdict("no_harness", NO_ASSISTANT)
+        # Launcher or IAM down: not recorded, the same press may succeed later.
+        return Verdict("unavailable", ASSISTANT_UNAVAILABLE, final=False)
 
     async def _link_refused(self, exc: LinkRefused, tenant_id: uuid.UUID, user_id: str) -> Verdict:
         logger.info("decision: IAM refused the assertion (%s)", exc.code)

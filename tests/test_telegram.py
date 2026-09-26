@@ -96,6 +96,22 @@ def decide_actions(approval_id: uuid.UUID) -> list[dict[str, Any]]:
     ]
 
 
+class FakeLauncher:
+    """The launcher of personal harnesses: what reached it, and what it answers."""
+
+    def __init__(self) -> None:
+        self.received: list[tuple[uuid.UUID, dict[str, Any]]] = []
+        self.answer = "accepted"
+
+    async def deliver(self, principal_id: uuid.UUID, body: dict[str, Any]) -> str:
+        if self.answer == "accepted":
+            self.received.append((principal_id, body))
+        return self.answer
+
+    async def aclose(self) -> None:
+        return None
+
+
 @dataclass
 class Telegram:
     h: Harness
@@ -103,6 +119,7 @@ class Telegram:
     iam: FakeIam
     cp: FakeControlPlane
     token: Callable[..., str]
+    launcher: FakeLauncher
 
     async def update(self, body: dict[str, Any], secret: str | None = SECRET) -> httpx.Response:
         headers = {SECRET_HEADER: secret} if secret is not None else {}
@@ -212,13 +229,15 @@ async def tg(
     )
     service_client = ControlPlaneClient("https://cp.test", "service-key", transport=cp.transport)
     approvals = ControlPlaneApprovals("https://cp.test", service_client, transport=cp.transport)
+    launcher = FakeLauncher()
     async with harness_factory(
         settings=telegram_settings(),
         telegram_transport=bot.transport,
         channel_links=links,
         approvals=approvals,
+        harness=launcher,
     ) as harness:
-        yield Telegram(harness, bot, iam, cp, token)
+        yield Telegram(harness, bot, iam, cp, token, launcher)
     await service_client.aclose()
     await links.aclose()
 
@@ -675,3 +694,133 @@ def test_commands_addressed_to_the_bot() -> None:
     assert parse_command("/start@taimen_bot abc") == ("start", "abc")
     assert parse_command("/unlink") == ("unlink", "")
     assert parse_command("hello") is None
+
+
+# --- The assistant conversation (TAI-ADR-0051 §7) ---------------------------------
+
+
+def harness_actions(request_id: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": verb,
+            "label": label,
+            "data": {"kind": "harness_approval", "requestId": request_id, "decision": verb},
+        }
+        for verb, label in (("approve", "Разрешить"), ("reject", "Отклонить"))
+    ]
+
+
+async def send_confirmation(tg: Telegram, person: Person, request_id: str) -> None:
+    response = await tg.h.client.post(
+        "/api/v1/notifications",
+        json={
+            "recipient": to(person),
+            "type": "harness.confirmation",
+            "title": "Ассистент просит подтверждения",
+            "body": "Создать задачу «Сверить акты»?",
+            "actions": harness_actions(request_id),
+        },
+        headers={**auth(tg.token()), "Idempotency-Key": uuid.uuid4().hex},
+    )
+    assert response.status_code == 201, response.text
+    await tg.h.drain()
+
+
+async def test_free_text_of_a_linked_person_goes_to_their_conversation(
+    tg: Telegram, make_person: Callable[..., Person]
+) -> None:
+    person = make_person()
+    await tg.link(person, 7001)
+    before = len(tg.bot.of("sendMessage"))
+    assert (await tg.update(private(7001, "Что сегодня важного?"))).status_code == 200
+    assert len(tg.launcher.received) == 1
+    principal, body = tg.launcher.received[0]
+    assert principal == person.iam_principal_id
+    assert body["channel"] == "telegram" and body["text"] == "Что сегодня важного?"
+    assert body["messageId"].startswith("7001:")
+    # The answer comes from the assistant later, not from the bot now.
+    assert len(tg.bot.of("sendMessage")) == before
+
+
+async def test_text_of_an_unlinked_account_goes_no_further(tg: Telegram) -> None:
+    await tg.update(private(7002, "Привет"))
+    assert tg.launcher.received == []
+    assert "не привязан" in tg.bot.of("sendMessage")[-1]["text"]
+
+
+async def test_group_text_and_commands_are_not_conversation(
+    tg: Telegram, make_person: Callable[..., Person]
+) -> None:
+    person = make_person()
+    await tg.link(person, 7003)
+    await tg.update(in_group(-100500, 7003, "Всем привет"))
+    await tg.update(private(7003, "/help"))
+    assert tg.launcher.received == []
+
+
+async def test_assistant_unavailable_or_absent_is_explained(
+    tg: Telegram, make_person: Callable[..., Person]
+) -> None:
+    person = make_person()
+    await tg.link(person, 7004)
+    tg.launcher.answer = "unavailable"
+    await tg.update(private(7004, "Ты тут?"))
+    assert "недоступен" in tg.bot.of("sendMessage")[-1]["text"]
+    tg.launcher.answer = "no_harness"
+    await tg.update(private(7004, "Ты тут?"))
+    assert "нет рабочего места" in tg.bot.of("sendMessage")[-1]["text"]
+
+
+async def test_harness_confirmation_press_reaches_the_harness_once(
+    tg: Telegram, make_person: Callable[..., Person]
+) -> None:
+    person = make_person()
+    await tg.link(person, 7005)
+    await send_confirmation(tg, person, "req-1")
+    sent = tg.sent_to(7005)
+    answer = await tg.press(sent, 7005, index=0, callback_id="cb-harness-1")
+    assert "разрешено" in answer
+    assert tg.launcher.received == [
+        (
+            person.iam_principal_id,
+            {
+                "channel": "telegram",
+                "messageId": "cb-harness-1",
+                "approval": {"id": "req-1", "decision": "approve"},
+            },
+        )
+    ]
+    # Telegram redelivers the same callback: one press.
+    await tg.press(sent, 7005, index=0, callback_id="cb-harness-1")
+    assert len(tg.launcher.received) == 1
+    # Another press after the answer: the buttons are closed.
+    again = await tg.press(sent, 7005, index=1)
+    assert "Уже решено" in again
+    assert len(tg.launcher.received) == 1
+
+
+async def test_harness_confirmation_is_retried_after_an_outage(
+    tg: Telegram, make_person: Callable[..., Person]
+) -> None:
+    person = make_person()
+    await tg.link(person, 7006)
+    await send_confirmation(tg, person, "req-2")
+    sent = tg.sent_to(7006)
+    tg.launcher.answer = "unavailable"
+    assert "недоступен" in await tg.press(sent, 7006, callback_id="cb-harness-2")
+    tg.launcher.answer = "accepted"
+    assert "разрешено" in await tg.press(sent, 7006, callback_id="cb-harness-2")
+    assert len(tg.launcher.received) == 1
+
+
+async def test_harness_confirmation_of_an_unlinked_account_is_refused(
+    tg: Telegram, make_person: Callable[..., Person]
+) -> None:
+    person = make_person()
+    await tg.link(person, 7007)
+    await send_confirmation(tg, person, "req-3")
+    sent = tg.sent_to(7007)
+    await tg.update(private(7007, "/unlink"))
+    answer = await tg.press(sent, 7007)
+    assert "не привязан" in answer
+    assert tg.launcher.received == []

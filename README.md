@@ -67,6 +67,9 @@ Settings are `NS_*` environment variables (`src/notification_service/config.py`)
 | `NS_CHANNEL_GROUP_CODE_TTL_SECONDS` | lifetime of a group link code (600 s) |
 | `NS_IAM_CHANNEL_AUDIENCE`, `NS_IAM_CHANNEL_SCOPE` | the service as a channel adapter in IAM: `iam` / `iam:channel-links` |
 | `NS_TASK_URL_TEMPLATE` | task link in notifications built from events, `{taskPublicId}` / `{taskId}`; empty — no link |
+| `NS_HARNESS_LAUNCHER_URL`, `NS_HARNESS_AUDIENCE`, `NS_HARNESS_SCOPE` | the Telegram channel as an entry into the person's assistant conversation (TAI-ADR-0051 §7): the launcher of personal harnesses (e.g. `http://harness-launcher:8080/harness`), the service account needs `human-harness` / `harness:inbound`; empty URL — notifications only |
+
+Free text a linked person writes to the bot in the private chat goes to the launcher of personal harnesses (`POST …/_launcher/internal/principals/{iamPrincipalId}/inbound`, `{channel, messageId, text}`) and becomes a message of their single assistant conversation; the answer comes back later through `notify.send`. A press of a harness confirmation button (`data.kind = "harness_approval"`, `{requestId, decision}`) goes the same way as `{channel, messageId, approval: {id, decision}}` — only in the person's own private chat, recorded once per callback. An unlinked account's text goes no further than the service; an unavailable launcher or a person without a harness is answered in the chat.
 
 Without IAM settings the service answers `503` on every API route; without Control
 Plane settings it answers `503` on sending to people and roles. The Telegram

@@ -55,6 +55,7 @@ from notification_service.events import (
     ServiceIdentity,
     build_consumer,
 )
+from notification_service.harness import HarnessInbound, LauncherInbound
 from notification_service.sending import NotificationSender
 from notification_service.skill import router as skill_router
 from notification_service.telegram_bot import TelegramWebhook
@@ -84,6 +85,8 @@ class Overrides:
     channel_links: ChannelLinks | None = None
     approvals: Approvals | None = None
     principal_names: PrincipalNames | None = None
+    # The launcher of personal harnesses (free text and harness confirmations).
+    harness: HarnessInbound | None = None
 
 
 def build_verifier(settings: Settings) -> TokenVerifier | None:
@@ -172,6 +175,22 @@ def build_channel_links(settings: Settings) -> IamChannelLinks | None:
     return IamChannelLinks(settings.iam_url, tokens, verifier)
 
 
+def build_harness(settings: Settings) -> LauncherInbound | None:
+    """The channel as an entry into the assistant conversation (TAI-ADR-0051 §7)."""
+    secret = settings.service_client_secret.get_secret_value()
+    if not (
+        settings.harness_launcher_url and settings.iam_url and settings.service_client_id and secret
+    ):
+        return None
+    tokens = ServiceTokenProvider(
+        settings.iam_url,
+        ServiceCredentials(
+            settings.service_client_id, secret, settings.harness_audience, (settings.harness_scope,)
+        ),
+    )
+    return LauncherInbound(settings.harness_launcher_url, tokens)
+
+
 async def run_event_consumer(consumer: EventConsumer) -> None:
     try:
         await consumer.run()
@@ -240,6 +259,7 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
         )
         app.state.sender = sender
         own_links = None
+        own_harness = None
         telegram = None
         if bot is not None and messages is not None:
             links = overrides.channel_links
@@ -259,6 +279,7 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
                 sender=sender,
                 links=links,
                 approvals=approvals,
+                harness=overrides.harness or (own_harness := build_harness(settings)),
             )
         app.state.telegram = telegram
         consumer = (
@@ -289,6 +310,8 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
                 await connection.tokens.aclose()
             if own_links is not None:
                 await own_links.aclose()
+            if own_harness is not None:
+                await own_harness.aclose()
             if bot is not None:
                 await bot.aclose()
             if overrides.engine is None:
