@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     # and exchanging channel assertions (``iam:channel-links`` in audience ``iam``).
     iam_channel_audience: str = "iam"
     iam_channel_scope: str = "iam:channel-links"
+    # Launcher of personal harnesses (TAI-ADR-0051 §7): free text of a linked
+    # person and presses of harness confirmations go into their conversation.
+    # Empty — the channel stays notifications-only. The service account needs
+    # audience ``human-harness`` with scope ``harness:inbound``.
+    harness_launcher_url: str = ""
+    harness_audience: str = "human-harness"
+    harness_scope: str = "harness:inbound"
 
     # Web inbox stream: how often an idle stream re-checks the database (a
     # fallback for deliveries made by another process) and sends a keep-alive.
