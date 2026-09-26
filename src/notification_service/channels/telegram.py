@@ -36,13 +36,16 @@ from notification_service.channels.base import (
 from notification_service.db import transaction
 
 # ``data.kind`` of the actions this channel renders as buttons: the decision
-# actions of the core's approvals.
+# actions of the core's approvals and the confirmations of a person's harness
+# (TAI-ADR-0051 §7).
 from notification_service.events import DECIDE
 from notification_service.models import ChannelGroup, Delivery, Notification
 
 logger = logging.getLogger("notification_service.telegram")
 
 TELEGRAM = "telegram"
+HARNESS_APPROVAL = "harness_approval"
+BUTTON_KINDS = (DECIDE, HARNESS_APPROVAL)
 # Bot API limit on the text of a message (after entity parsing).
 MAX_TEXT = 4096
 CALLBACK_PREFIX = "a"
@@ -229,7 +232,7 @@ def keyboard(notification_id: uuid.UUID, actions: list[dict[str, Any]]) -> dict[
             "callback_data": callback_data(notification_id, index),
         }
         for index, action in enumerate(actions)
-        if (action.get("data") or {}).get("kind") == DECIDE
+        if (action.get("data") or {}).get("kind") in BUTTON_KINDS
     ]
     return {"inline_keyboard": [row]} if row else None
 

@@ -60,6 +60,9 @@ uv run notification-service          # API и воркер, порт NS_PORT (80
 | `NS_CHANNEL_GROUP_CODE_TTL_SECONDS` | срок кода привязки группы (600 с) |
 | `NS_IAM_CHANNEL_AUDIENCE`, `NS_IAM_CHANNEL_SCOPE` | сервис как адаптер канала в IAM: `iam` / `iam:channel-links` |
 | `NS_TASK_URL_TEMPLATE` | ссылка на задачу в уведомлениях из событий, `{taskPublicId}` / `{taskId}`; пусто — без ссылки |
+| `NS_HARNESS_LAUNCHER_URL`, `NS_HARNESS_AUDIENCE`, `NS_HARNESS_SCOPE` | канал Telegram как вход в беседу ассистента человека (TAI-ADR-0051 п.7): launcher персональных харнессов (например `http://harness-launcher:8080/harness`), service account нужен `human-harness` / `harness:inbound`; пустой URL — только уведомления |
+
+Свободный текст привязанного человека в личном чате с ботом уходит launcher'у персональных харнессов (`POST …/_launcher/internal/principals/{iamPrincipalId}/inbound`, `{channel, messageId, text}`) и становится репликой его единственной беседы с ассистентом; ответ приходит позже через `notify.send`. Нажатие кнопки подтверждения харнесса (`data.kind = "harness_approval"`, `{requestId, decision}`) уходит тем же путём как `{channel, messageId, approval: {id, decision}}` — только в личном чате самого человека, одно на callback. Текст непривязанного аккаунта дальше сервиса не уходит; недоступный launcher или отсутствие рабочего места объясняется в чате.
 
 Без настроек IAM сервис отвечает `503` на все маршруты API, без настроек Control
 Plane — `503` на отправку людям и ролям; вебхук Telegram
