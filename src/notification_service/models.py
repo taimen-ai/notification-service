@@ -301,3 +301,34 @@ class ChannelAddress(Base):
 # Position and dedup record of the Control Plane event consumer (SDK tables,
 # ``event_cursors`` and ``handled_events``), declared here for the migrations.
 EVENT_CURSORS, HANDLED_EVENTS = cursor_tables(Base.metadata)
+
+
+class NotificationRule(Base):
+    """One immutable version of a notification rule (ADR-0005 §5).
+
+    A key has at most one ``active`` version — the one the consumer executes.
+    Applying another spec supersedes it; retiring marks it ``retired``.
+    """
+
+    __tablename__ = "notification_rules"
+    __table_args__ = (
+        CheckConstraint("state IN ('active', 'superseded', 'retired')", name="state"),
+        UniqueConstraint("tenant_id", "key", "version"),
+        Index(
+            "uq_notification_rules_active_key",
+            "tenant_id",
+            "key",
+            unique=True,
+            postgresql_where=text("state = 'active'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    key: Mapped[str] = mapped_column(String(128))
+    version: Mapped[int] = mapped_column(Integer)
+    spec: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    spec_hash: Mapped[str] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(20))
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -2,6 +2,18 @@
 
 Статус: предложено (2026-09-25), задача N008 (TASK-000417)
 
+> **Частично заменено [ADR-0005](0005-notification-rules-as-data.md)
+> (2026-09-27, `declarative-cycle` C003).** Таблица «События → уведомления»,
+> фильтр потребителя (`types = approval., task.verification_failed`) и
+> `NS_TASK_URL_TEMPLATE` уходят из кода: какие события становятся
+> уведомлениями, кому, каким текстом, с какими кнопками и что их закрывает —
+> правила `NotificationRule`, применённые к сервису; прежнее поведение — три
+> правила пакета `notify`. Чтение журнала, курсор, отправитель, барьеры
+> дедупликации (ключи `control-plane:approval:<id>`, `control-plane:event:<id>`
+> сохраняются) и закрытые действия действуют. Код перешёл в C007 (TASK-000646):
+> таблица ниже — историческая, её поведение закрепляет тест совместимости
+> `tests/test_notification_rules_compat.py`.
+
 Основание: `specs/notifications/` суперпроекта (spec — FR-008, SC-001, сценарий 1;
 plan — «Исследование» п. 5, 7, 9 и «Потоки»; tasks — N008), TAI-ADR-0048 п. 6,
 TAI-ADR-0049; SDK потребителя — CP-ADR-0069 (`control_plane_client.events`),
@@ -46,6 +58,9 @@ SDK `event_cursors` и `handled_events` в БД сервиса (миграция
 tenant людей того tenant'а ядра, события которого он читает.
 
 ### События → уведомления
+
+Заменено правилами уведомлений (ADR-0005 п. 8) — таблица описывает поведение
+до перехода и три правила пакета `notify`, которые его переносят.
 
 | Событие | Что делает сервис |
 |---|---|
@@ -108,6 +123,6 @@ tenant людей того tenant'а ядра, события которого �
 ```conformance
 - grep: {path: src/notification_service/events.py, pattern: 'from control_plane_client.events import'}
 - grep: {path: src/notification_service/events.py, pattern: 'SqlAlchemyCursorStore\(engine\)'}
-- grep: {path: src/notification_service/events.py, pattern: 'control-plane:approval:'}
+- grep: {path: tests/test_notification_rules_compat.py, pattern: 'control-plane:approval:'}
 - grep: {path: src/notification_service/worker.py, pattern: 'actions_closed_at'}
 ```

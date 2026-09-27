@@ -54,7 +54,8 @@ class Executor:
         async def resolve(host: str, port: int) -> list[str]:
             return ["10.0.0.10"]
 
-        async def token_source(audience: str) -> str | None:
+        async def token_source(audience: str, scopes: tuple[str, ...] = ()) -> str | None:
+            # The core asks for the audience and the scopes of the skill's contract.
             assert audience == AUDIENCE
             return token
 

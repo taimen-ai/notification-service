@@ -81,12 +81,15 @@ def test_openapi_describes_the_contract() -> None:
         "/api/v1/me/notification-preferences",
         "/api/v1/mandatory-rules",
         "/api/v1/mandatory-rules/{rule_id}",
+        "/api/v1/notification-rules",
+        "/api/v1/notification-rules:validate",
+        "/api/v1/notification-rules/{key}:retire",
     } <= paths
 
 
 async def test_event_consumer_is_built_only_with_control_plane_and_iam(engine: AsyncEngine) -> None:
     from notification_service.app import build_event_consumer, connect_control_plane
-    from notification_service.events import CONSUMER_NAME, EVENT_TYPES
+    from notification_service.events import CONSUMER_NAME
 
     assert connect_control_plane(settings_for()) is None
     configured = settings_for(
@@ -103,10 +106,13 @@ async def test_event_consumer_is_built_only_with_control_plane_and_iam(engine: A
         sender: Any = object()
         disabled = configured.model_copy(update={"events_enabled": False})
         assert build_event_consumer(disabled, connection, engine, sender) is None
-        consumer = build_event_consumer(configured, connection, engine, sender)
-        assert consumer is not None
+        supervisor = build_event_consumer(configured, connection, engine, sender)
+        assert supervisor is not None
+        # Until the rules are read, nothing is subscribed to (ADR-0005 §2).
+        assert supervisor.consumer is None
+        consumer = supervisor.build(("approval.requested",))
         assert consumer.name == CONSUMER_NAME
-        assert consumer.types == EVENT_TYPES
+        assert consumer.types == ("approval.requested",)
         assert consumer.workspace_id == "ws-1"
         # A new installation does not notify about the journal's history.
         assert consumer.start == "latest"

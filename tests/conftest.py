@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -11,6 +12,7 @@ from typing import Any
 
 import httpx
 import pytest
+import yaml
 from platform_auth import StaticKeySet, TokenVerifier, VerifierConfig
 from platform_auth.testing import SigningKey
 from sqlalchemy import text
@@ -254,3 +256,15 @@ def to_principal(person: Person) -> dict[str, str]:
 @pytest.fixture
 def unique_key() -> Iterator[Callable[[], str]]:
     yield lambda: uuid.uuid4().hex
+
+
+ADR_0005 = ROOT / "docs" / "adr" / "0005-notification-rules-as-data.md"
+
+
+def adr_rules(task_url_base: str = "https://console.test/tasks") -> list[dict[str, Any]]:
+    """The rules of the former built-in behaviour: the YAML blocks of ADR-0005 §8.
+
+    ``${TASK_URL_BASE}`` is what the package installer substitutes before applying.
+    """
+    text = ADR_0005.read_text(encoding="utf-8").replace("${TASK_URL_BASE}", task_url_base)
+    return [yaml.safe_load(block) for block in re.findall(r"```yaml\n(.*?)```", text, re.DOTALL)]

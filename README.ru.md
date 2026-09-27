@@ -14,12 +14,18 @@
 [ADR-0003](docs/adr/0003-telegram-channel-and-decisions.md)): привязка личного
 чата кодом из IAM, привязка групп к workspace и роли, сообщения с кнопками
 решения — нажатие становится решением человека в ядре. Потребитель событий ядра
-(N008, [ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) превращает
-`approval.requested` в уведомление с действиями решения (их закрывает
-`approval.approved|rejected|cancelled`), а `task.verification_failed` — в
-уведомление владельцу задачи. Пакеты шлют уведомления скиллом `notify.send@1`
+(N008, [ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) исполняет
+правила уведомлений — объекты каталога `NotificationRule`, применённые к сервису
+([ADR-0005](docs/adr/0005-notification-rules-as-data.md), C007 фичи
+`declarative-cycle`): какое событие становится уведомлением, кому, каким текстом,
+с какими кнопками и что их закрывает. Прежнее поведение (запрос решения с
+кнопками, закрытие по исходу, проваленная проверка — владельцу задачи) — три
+правила пакета `notify`; без применённых правил сервис событий не читает.
+Правила — `/api/v1/notification-rules` (scope `notifications:admin`). Пакеты шлют
+уведомления скиллом `notify.send@1`
 ([ADR-0004](docs/adr/0004-notify-send-skill.md), контракт —
-[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)).
+[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)). Реестр ADR —
+[docs/adr/README.md](docs/adr/README.md).
 
 ## Устройство
 
@@ -54,12 +60,11 @@ uv run notification-service          # API и воркер, порт NS_PORT (80
 | `NS_EMAIL_MODE` | `smtp`, `log` (staging: только запись в лог) или `disabled` |
 | `NS_EMAIL_FROM`, `NS_SMTP_HOST`, `NS_SMTP_PORT`, `NS_SMTP_STARTTLS`, `NS_SMTP_USERNAME`, `NS_SMTP_PASSWORD` | SMTP |
 | `NS_INBOX_POLL_SECONDS`, `NS_INBOX_KEEPALIVE_SECONDS` | поток SSE инбокса |
-| `NS_EVENTS_ENABLED`, `NS_EVENTS_START`, `NS_EVENTS_WORKSPACE_ID`, `NS_EVENTS_POLL_SECONDS` | потребитель событий ядра: вкл/выкл, откуда начать при первом запуске (`latest` по умолчанию, `earliest`), поддерево workspace (пусто — весь tenant), период опроса |
+| `NS_EVENTS_ENABLED`, `NS_EVENTS_START`, `NS_EVENTS_WORKSPACE_ID`, `NS_EVENTS_POLL_SECONDS` | потребитель событий ядра: вкл/выкл, откуда начать при первом запуске (`latest` по умолчанию, `earliest`), поддерево workspace (пусто — весь tenant), период опроса; с тем же периодом перечитываются правила уведомлений |
 | `NS_TELEGRAM_BOT_TOKEN`, `NS_TELEGRAM_WEBHOOK_SECRET` | бот Telegram и секрет вебхука (`secret_token` в `setWebhook`); без токена канала нет |
 | `NS_TELEGRAM_API_URL`, `NS_TELEGRAM_BOT_USERNAME`, `NS_TELEGRAM_TIMEOUT_SECONDS` | Bot API; имя бота — для команд и ссылок привязки групп |
 | `NS_CHANNEL_GROUP_CODE_TTL_SECONDS` | срок кода привязки группы (600 с) |
 | `NS_IAM_CHANNEL_AUDIENCE`, `NS_IAM_CHANNEL_SCOPE` | сервис как адаптер канала в IAM: `iam` / `iam:channel-links` |
-| `NS_TASK_URL_TEMPLATE` | ссылка на задачу в уведомлениях из событий, `{taskPublicId}` / `{taskId}`; пусто — без ссылки |
 | `NS_HARNESS_LAUNCHER_URL`, `NS_HARNESS_AUDIENCE`, `NS_HARNESS_SCOPE` | канал Telegram как вход в беседу ассистента человека (TAI-ADR-0051 п.7): launcher персональных харнессов (например `http://harness-launcher:8080/harness`), service account нужен `human-harness` / `harness:inbound`; пустой URL — только уведомления |
 
 Свободный текст привязанного человека в личном чате с ботом уходит launcher'у персональных харнессов (`POST …/_launcher/internal/principals/{iamPrincipalId}/inbound`, `{channel, messageId, text}`) и становится репликой его единственной беседы с ассистентом; ответ приходит позже через `notify.send`. Нажатие кнопки подтверждения харнесса (`data.kind = "harness_approval"`, `{requestId, decision}`) уходит тем же путём как `{channel, messageId, approval: {id, decision}}` — только в личном чате самого человека, одно на callback. Текст непривязанного аккаунта дальше сервиса не уходит; недоступный launcher или отсутствие рабочего места объясняется в чате.
@@ -69,7 +74,7 @@ Plane — `503` на отправку людям и ролям; вебхук Tel
 (`POST /channels/telegram/webhook`, публичный, проверяет заголовок
 `X-Telegram-Bot-Api-Secret-Token`) без токена бота отвечает `404`, без секрета —
 `401`; потребитель событий работает, когда
-настроены и Control Plane, и IAM. Секреты — только в окружении или
+настроены и Control Plane, и IAM, и есть хотя бы одно включённое правило. Секреты — только в окружении или
 `secrets/`, не в репозитории.
 
 ## Разработка

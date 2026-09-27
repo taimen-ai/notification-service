@@ -11,6 +11,8 @@ dependencies = [
     "control-plane-client[events]",
     "fastapi>=0.115",
     "httpx>=0.28",
+    # Notification rule specs are checked against the platform's JSON Schema.
+    "jsonschema>=4.23",
     "platform-auth-sdk>=0.1.0",
     "psycopg[binary]>=3.2",
     "pydantic[email]>=2.8",
@@ -68,4 +70,4 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
 ignore = ["B008", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.isort]
-known-local-folder = ["conftest", "telegram_fakes"]
+known-local-folder = ["conftest", "core_events", "telegram_fakes"]

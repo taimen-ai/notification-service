@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from notification_service import inbox
+from notification_service import inbox, rule_store
 from notification_service.auth import SCOPE_ADMIN, Admin, Reader, Sender, SenderOrAdmin
 from notification_service.channels import ChannelRegistry
 from notification_service.channels.web import InboxBroker
@@ -26,10 +26,13 @@ from notification_service.models import (
     Delivery,
     MandatoryRule,
     Notification,
+    NotificationRule,
     Preference,
     QuietHours,
 )
+from notification_service.rules import RULE_KEY_RE, check_spec, spec_hash
 from notification_service.schemas import (
+    RULE_KEY_PATTERN,
     ChannelAddressOut,
     ChannelGroupCreate,
     ChannelGroupIntentOut,
@@ -40,6 +43,10 @@ from notification_service.schemas import (
     MandatoryRuleIn,
     MandatoryRuleOut,
     NotificationCreate,
+    NotificationRuleCheckOut,
+    NotificationRuleIn,
+    NotificationRuleOut,
+    NotificationRulePageOut,
     PreferenceOut,
     PreferencesOut,
     PreferencesPatch,
@@ -520,3 +527,112 @@ async def delete_channel_group(
             group.disabled_at = utcnow()
             group.disabled_reason = "unlinked_by_admin"
     return Response(status_code=204)
+
+
+# --- Notification rules (ADR-0005) ---------------------------------------------
+
+
+def _notification_rule_out(rule: NotificationRule) -> NotificationRuleOut:
+    return NotificationRuleOut.model_validate(rule)
+
+
+def _checked(payload: NotificationRuleIn) -> None:
+    errors = check_spec(payload.spec)
+    if errors:
+        raise Unprocessable(
+            "notification rule is invalid",
+            code="invalid_notification_rule",
+            details={"errors": [error.as_dict() for error in errors]},
+        )
+
+
+def _rules_changed(request: Request) -> None:
+    # The consumer of this process picks the new filter up now, not at its next poll.
+    consumer = request.app.state.event_consumer
+    if consumer is not None:
+        consumer.wake()
+
+
+@router.get(
+    "/notification-rules",
+    response_model=NotificationRulePageOut,
+    summary="Active notification rules of the organization, by key (and retired ones)",
+)
+async def list_notification_rules(
+    request: Request,
+    ctx: Admin,
+    key: Annotated[str | None, Query(pattern=RULE_KEY_PATTERN)] = None,
+    include_retired: Annotated[bool, Query(alias="includeRetired")] = False,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    cursor: Annotated[str | None, Query()] = None,
+) -> NotificationRulePageOut:
+    if cursor is not None and not RULE_KEY_RE.match(cursor):
+        raise Unprocessable("cursor is invalid", code="invalid_cursor")
+    async with _sessions(request)() as session:
+        rows = await rule_store.listing(
+            session,
+            ctx.tenant_id,
+            key=key,
+            include_retired=include_retired,
+            after=cursor,
+            limit=limit + 1,
+        )
+    page = rows[:limit]
+    return NotificationRulePageOut(
+        items=[_notification_rule_out(row) for row in page],
+        next_cursor=page[-1].key if len(rows) > limit else None,
+    )
+
+
+@router.post(
+    "/notification-rules",
+    response_model=NotificationRuleOut,
+    status_code=201,
+    summary="Apply a notification rule: a new version, or the active one when the spec is equal",
+)
+async def apply_notification_rule(
+    payload: NotificationRuleIn, request: Request, ctx: Admin
+) -> JSONResponse:
+    _checked(payload)
+    async with transaction(_sessions(request)) as session:
+        rule, created = await rule_store.apply(
+            session, ctx.tenant_id, payload.key, payload.spec, ctx.principal_id
+        )
+        body = _dump(_notification_rule_out(rule))
+    if created:
+        _rules_changed(request)
+    return JSONResponse(body, status_code=201 if created else 200)
+
+
+@router.post(
+    "/notification-rules:validate",
+    response_model=NotificationRuleCheckOut,
+    summary="Check a notification rule without applying it",
+)
+async def validate_notification_rule(
+    payload: NotificationRuleIn, request: Request, ctx: Admin
+) -> NotificationRuleCheckOut:
+    _checked(payload)
+    digest = spec_hash(payload.spec)
+    async with _sessions(request)() as session:
+        current = await rule_store.latest(session, ctx.tenant_id, payload.key)
+    active = current is not None and current.state == rule_store.ACTIVE
+    return NotificationRuleCheckOut(
+        valid=True,
+        spec_hash=digest,
+        changed=not (active and current.spec_hash == digest),  # type: ignore[union-attr]
+    )
+
+
+@router.post(
+    "/notification-rules/{key}:retire",
+    response_model=NotificationRuleOut,
+    summary="Take a notification rule out of use; notifications already sent stay",
+)
+async def retire_notification_rule(key: str, request: Request, ctx: Admin) -> NotificationRuleOut:
+    async with transaction(_sessions(request)) as session:
+        rule = await rule_store.retire(session, ctx.tenant_id, key)
+    if rule is None:
+        raise NotFound("notification rule not found")
+    _rules_changed(request)
+    return _notification_rule_out(rule)
