@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "description": "Правило уведомления (TAI-ADR-0053, ADR-0003 notification-service): событие ядра и условие → адресат → текст и кнопки. Хранит и исполняет сервис уведомлений; шаблоны — подстановка {{payload.…}}, {{event.…}}, {{task.…}} без логики.",
+  "required": [
+    "on",
+    "recipient",
+    "notification"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "on": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*(\\.\\*)?$",
+          "description": "Тип события каталога ядра или префикс.*"
+        },
+        "when": {
+          "type": [
+            "object",
+            "boolean"
+          ],
+          "description": "Условие грамматики правил ядра над payload, event и task"
+        }
+      }
+    },
+    "recipient": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "assigned",
+            "role",
+            "taskOwner",
+            "taskAssignee",
+            "principal"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Путь к principal или роли в событии (assigned, role) или id/переменная (principal)"
+        },
+        "workspace": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Путь к workspace для role; по умолчанию workspace события"
+        },
+        "fallback": {
+          "enum": [
+            "taskOwner",
+            "taskAssignee",
+            "none"
+          ],
+          "default": "none"
+        }
+      }
+    },
+    "notification": {
+      "type": "object",
+      "required": [
+        "type",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "description": "Тип уведомления — по нему работают настройки получателя и обязательные правила"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "url"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "url": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "approvalDecide"
+            ]
+          },
+          "description": "approvalDecide — кнопки «Одобрить»/«Отклонить» решения из payload.approvalId"
+        }
+      }
+    },
+    "dedupKeyTemplate": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "close": {
+      "type": "object",
+      "required": [
+        "on"
+      ],
+      "additionalProperties": false,
+      "description": "Закрыть кнопки уведомления с тем же ключом дедупликации, когда пришло событие",
+      "properties": {
+        "on": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "outcome": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Шаблон исхода, который показывается вместо кнопок"
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "enabled",
+        "disabled"
+      ],
+      "description": "По умолчанию enabled"
+    }
+  }
+}

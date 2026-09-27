@@ -19,7 +19,11 @@
 `approval.approved|rejected|cancelled`), а `task.verification_failed` — в
 уведомление владельцу задачи. Пакеты шлют уведомления скиллом `notify.send@1`
 ([ADR-0004](docs/adr/0004-notify-send-skill.md), контракт —
-[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)).
+[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)). Какие события
+становятся уведомлениями, переходит из кода в данные: объекты каталога
+`NotificationRule`, применённые к сервису
+([ADR-0005](docs/adr/0005-notification-rules-as-data.md); реализация — задача C007
+фичи `declarative-cycle`). Реестр ADR — [docs/adr/README.md](docs/adr/README.md).
 
 ## Устройство
 
