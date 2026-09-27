@@ -292,3 +292,38 @@ class ChannelGroupOut(ApiModel):
     created_at: datetime
     disabled_at: datetime | None
     disabled_reason: str | None
+
+
+# --- Notification rules (ADR-0005) --------------------------------------------------
+
+RULE_KEY_PATTERN = r"^[a-z0-9][a-z0-9._-]{0,127}$"
+
+
+class NotificationRuleIn(ApiModel):
+    """A rule to apply or check: its key and ``notificationRuleSpec``."""
+
+    key: str = Field(pattern=RULE_KEY_PATTERN)
+    # Checked against the platform schema and the event catalog (rules.check_spec).
+    spec: dict[str, Any]
+
+
+class NotificationRuleOut(ApiModel):
+    key: str
+    version: int
+    spec: dict[str, Any]
+    spec_hash: str
+    state: Literal["active", "superseded", "retired"]
+    created_by: uuid.UUID
+    created_at: datetime
+
+
+class NotificationRulePageOut(ApiModel):
+    items: list[NotificationRuleOut]
+    next_cursor: str | None
+
+
+class NotificationRuleCheckOut(ApiModel):
+    valid: bool
+    spec_hash: str
+    # Whether applying it would create a version: it differs from the active one.
+    changed: bool

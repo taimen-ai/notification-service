@@ -17,16 +17,18 @@ web inbox with an SSE stream. The Telegram channel (N007,
 chat with a code from IAM, linking groups to a workspace and a role, messages with
 decision buttons — a button press becomes a human decision in the core. The
 consumer of core events (N008,
-[ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) turns
-`approval.requested` into a notification with decision actions (closed by
-`approval.approved|rejected|cancelled`), and `task.verification_failed` into a
-notification to the task owner. Packages send notifications with the
-`notify.send@1` skill ([ADR-0004](docs/adr/0004-notify-send-skill.md), contract —
-[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)). Which events
-become notifications is moving from code to data: `NotificationRule` catalog
-objects applied to the service ([ADR-0005](docs/adr/0005-notification-rules-as-data.md);
-implementation — task C007 of `declarative-cycle`). The ADR registry is
-[docs/adr/README.md](docs/adr/README.md).
+[ADR-0002](docs/adr/0002-control-plane-event-consumer.md)) executes notification
+rules — `NotificationRule` catalog objects applied to the service
+([ADR-0005](docs/adr/0005-notification-rules-as-data.md), C007 of
+`declarative-cycle`): which event becomes a notification, for whom, with what
+text and buttons, and what closes them. The former behaviour (a decision request
+with buttons, closed by the outcome; a failed check to the task owner) is three
+rules of the `notify` package; with no rule applied the service reads no events.
+Rules live at `/api/v1/notification-rules` (scope `notifications:admin`).
+Packages send notifications with the `notify.send@1` skill
+([ADR-0004](docs/adr/0004-notify-send-skill.md), contract —
+[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)). The ADR
+registry is [docs/adr/README.md](docs/adr/README.md).
 
 ADRs are in Russian; English summaries on request.
 
@@ -65,12 +67,11 @@ Settings are `NS_*` environment variables (`src/notification_service/config.py`)
 | `NS_EMAIL_MODE` | `smtp`, `log` (staging: log only) or `disabled` |
 | `NS_EMAIL_FROM`, `NS_SMTP_HOST`, `NS_SMTP_PORT`, `NS_SMTP_STARTTLS`, `NS_SMTP_USERNAME`, `NS_SMTP_PASSWORD` | SMTP |
 | `NS_INBOX_POLL_SECONDS`, `NS_INBOX_KEEPALIVE_SECONDS` | inbox SSE stream |
-| `NS_EVENTS_ENABLED`, `NS_EVENTS_START`, `NS_EVENTS_WORKSPACE_ID`, `NS_EVENTS_POLL_SECONDS` | core event consumer: on/off, where to start on the first run (`latest` by default, `earliest`), workspace subtree (empty — the whole tenant), polling period |
+| `NS_EVENTS_ENABLED`, `NS_EVENTS_START`, `NS_EVENTS_WORKSPACE_ID`, `NS_EVENTS_POLL_SECONDS` | core event consumer: on/off, where to start on the first run (`latest` by default, `earliest`), workspace subtree (empty — the whole tenant), polling period; the notification rules are re-read at the same period |
 | `NS_TELEGRAM_BOT_TOKEN`, `NS_TELEGRAM_WEBHOOK_SECRET` | Telegram bot and webhook secret (`secret_token` in `setWebhook`); no token — no channel |
 | `NS_TELEGRAM_API_URL`, `NS_TELEGRAM_BOT_USERNAME`, `NS_TELEGRAM_TIMEOUT_SECONDS` | Bot API; the bot name is used in commands and group link URLs |
 | `NS_CHANNEL_GROUP_CODE_TTL_SECONDS` | lifetime of a group link code (600 s) |
 | `NS_IAM_CHANNEL_AUDIENCE`, `NS_IAM_CHANNEL_SCOPE` | the service as a channel adapter in IAM: `iam` / `iam:channel-links` |
-| `NS_TASK_URL_TEMPLATE` | task link in notifications built from events, `{taskPublicId}` / `{taskId}`; empty — no link |
 | `NS_HARNESS_LAUNCHER_URL`, `NS_HARNESS_AUDIENCE`, `NS_HARNESS_SCOPE` | the Telegram channel as an entry into the person's assistant conversation (TAI-ADR-0051 §7): the launcher of personal harnesses (e.g. `http://harness-launcher:8080/harness`), the service account needs `human-harness` / `harness:inbound`; empty URL — notifications only |
 
 Free text a linked person writes to the bot in the private chat goes to the launcher of personal harnesses (`POST …/_launcher/internal/principals/{iamPrincipalId}/inbound`, `{channel, messageId, text}`) and becomes a message of their single assistant conversation; the answer comes back later through `notify.send`. A press of a harness confirmation button (`data.kind = "harness_approval"`, `{requestId, decision}`) goes the same way as `{channel, messageId, approval: {id, decision}}` — only in the person's own private chat, recorded once per callback. An unlinked account's text goes no further than the service; an unavailable launcher or a person without a harness is answered in the chat.
@@ -80,7 +81,7 @@ Plane settings it answers `503` on sending to people and roles. The Telegram
 webhook (`POST /channels/telegram/webhook`, public, checks the
 `X-Telegram-Bot-Api-Secret-Token` header) answers `404` without a bot token and
 `401` without a secret; the event consumer runs when both the Control Plane and IAM
-are configured. Secrets live only in the environment or in `secrets/`, never in the
+are configured and at least one rule is enabled. Secrets live only in the environment or in `secrets/`, never in the
 repository.
 
 ## Development

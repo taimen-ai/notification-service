@@ -1,30 +1,33 @@
-"""Consumer of Control Plane events: the core's decisions and failed checks reach people.
+"""Consumer of Control Plane events, driven by notification rules (ADR-0005).
 
-The Control Plane announces what it waits for in its journal; this module reads
-the journal with the consumer SDK of the core (``control_plane_client.events``)
-and turns it into ordinary notifications, sent under the service's own identity:
+Which events become notifications, for whom, with what text and buttons, and
+which events close those buttons is data: the ``NotificationRule`` versions
+applied to the service (``rule_store``). This module reads the journal with the
+consumer SDK of the core (``control_plane_client.events``) on the filter the
+enabled rules describe and executes them under the service's own identity:
 
-- ``approval.requested`` — a notification to the assigned principal or to the
-  holders of the required role in the approval's workspace, with the decision
-  actions (``approve``, ``reject``);
-- ``approval.approved|rejected|cancelled`` — the actions of that notification
-  close with the outcome; channels render them inactive;
-- ``task.verification_failed`` — a notification to the task's owner (else its
-  assignee) that an acceptance check failed.
+- an event of a rule's ``on.type`` whose ``on.when`` holds becomes one
+  notification of that rule, with the rule's dedup key;
+- an event of a rule's ``close.on`` closes the actions of the notification
+  with the dedup key the rule renders over it.
 
-Exactly one notification per event, across restarts: the SDK records every
-handled event id together with the cursor, and a notification is sent with a
-dedup key derived from the event (``approval:<id>``, ``event:<id>``), so an
-event handled again after a crash between the two replays the notification
-instead of creating a second one.
+No enabled rule — no consumer: the service reads no events and its cursor
+stays where it was (FR-012). The filter follows the rules within one poll.
+
+Exactly one notification per event and rule, across restarts: the SDK records
+every handled event id together with the cursor, and a notification is sent
+with the rule's dedup key, so an event handled again after a crash between the
+two replays the notification instead of creating a second one.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import re
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol
 
 from control_plane_client import (
@@ -36,10 +39,32 @@ from control_plane_client import (
 from control_plane_client.events import Event, EventConsumer
 from control_plane_client.events.sqlalchemy import SqlAlchemyCursorStore
 from platform_auth import ServiceTokenProvider, TokenVerifier, TrustedAuthContext
-from sqlalchemy.ext.asyncio import AsyncEngine
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from notification_service import rule_store
 from notification_service.config import Settings
 from notification_service.errors import Conflict, Unprocessable
+from notification_service.rule_store import ActiveRule
+from notification_service.rules import (
+    APPROVAL_DECIDE,
+    DEFAULT_ASSIGNED_REF,
+    DISPLAY_NAME,
+    ROOT_EVENT,
+    ROOT_PAYLOAD,
+    ROOT_TASK,
+    ConditionError,
+    closes_on,
+    condition_paths,
+    dedup_template,
+    evaluate,
+    fill,
+    on_matches,
+    parse_path,
+    placeholders,
+    subscription,
+    walk,
+)
 from notification_service.schemas import (
     MAX_BODY,
     MAX_TITLE,
@@ -53,29 +78,16 @@ from notification_service.sending import NotificationSender
 logger = logging.getLogger(__name__)
 
 CONSUMER_NAME = "notification-service"
-EVENT_TYPES = ("approval.", "task.verification_failed")
-REQUESTED = "approval.requested"
-VERIFICATION_FAILED = "task.verification_failed"
-# Decision events -> the outcome the actions of the request close with.
-CLOSING = {
-    "approval.approved": "approved",
-    "approval.rejected": "rejected",
-    "approval.cancelled": "cancelled",
-}
+CONSUMER_STOP_SECONDS = 10.0
 # ``data.kind`` of a decision action: what a channel that executes actions
-# (Telegram, N007) does with it.
+# (Telegram, ADR-0003) does with it.
 DECIDE = "approval.decide"
+MAX_DEDUP_KEY = 200
+MAX_OUTCOME = 200
+MAX_LINK_LABEL = 100
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-
-def approval_key(approval_id: str) -> str:
-    """Dedup key of the notification about an approval: decisions find it by it."""
-    return f"control-plane:approval:{approval_id}"
-
-
-def event_key(event_id: str) -> str:
-    return f"control-plane:event:{event_id}"
+_ABSOLUTE_URL = re.compile(r"^https?://[^\s/]+", re.IGNORECASE)
 
 
 def _line(value: str, limit: int) -> str:
@@ -90,7 +102,7 @@ def _text(value: str, limit: int) -> str:
 
 
 class Core(Protocol):
-    """What the handler reads from the Control Plane besides the event itself."""
+    """What rules read from the Control Plane besides the event itself."""
 
     async def task(self, task_id: str) -> dict[str, Any] | None:
         """``TaskOut`` or ``None`` when the task is gone or hidden from the service."""
@@ -132,7 +144,7 @@ class ServiceIdentity:
     Read from the token the service presents to the Control Plane, verified by
     platform-auth-sdk like any other token: the IAM tenant and ``sub`` of the
     service account. Only those two are used, so the first verified context is
-    kept for the life of the process.
+    kept for the life of the process. The tenant is also whose rules run.
     """
 
     def __init__(self, tokens: ServiceTokenProvider, verifier: TokenVerifier) -> None:
@@ -146,208 +158,385 @@ class ServiceIdentity:
         return self._context
 
 
-class CoreEventHandler:
-    """``control_plane_client.events.Handler``: one journal event, handled once."""
+RuleSource = Callable[[uuid.UUID], Awaitable[list[ActiveRule]]]
+
+
+def stored_rules(sessions: async_sessionmaker[AsyncSession]) -> RuleSource:
+    async def load(tenant_id: uuid.UUID) -> list[ActiveRule]:
+        return await rule_store.executable(sessions, tenant_id)
+
+    return load
+
+
+class EventFacts:
+    """The data roots of one event (ADR-0005 §4): ``payload``, ``event``, ``task``.
+
+    The task is read from the core only when a rule reads the root ``task``,
+    once per event; principal names once per principal.
+    """
+
+    _UNREAD = object()
+
+    def __init__(self, event: Event, core: Core) -> None:
+        self.event = event
+        self.payload: Mapping[str, Any] = event.get("payload") or {}
+        self._core = core
+        self._task: Any = self._UNREAD
+        self._names: dict[str, str | None] = {}
+
+    async def task(self) -> Mapping[str, Any] | None:
+        if self._task is self._UNREAD:
+            if self.event.get("entityType") == "task":
+                task_id = self.event.get("entityId")
+            else:
+                task_id = self.payload.get("taskId")
+            self._task = await self._core.task(str(task_id)) if task_id else None
+        return self._task  # type: ignore[no-any-return]
+
+    async def get(self, path: str) -> Any:
+        parsed = parse_path(path)
+        if parsed is None:
+            return None
+        root, segments = parsed
+        if segments and segments[-1] == DISPLAY_NAME:
+            principal = await self._walk(root, segments[:-1])
+            if isinstance(principal, str) and principal:
+                if principal not in self._names:
+                    self._names[principal] = await self._core.principal_name(principal)
+                return self._names[principal]
+        return await self._walk(root, segments)
+
+    async def _walk(self, root: str, segments: tuple[str, ...]) -> Any:
+        if root == ROOT_PAYLOAD:
+            return walk(self.payload, segments)
+        if root == ROOT_EVENT:
+            return walk({k: v for k, v in self.event.items() if k != "payload"}, segments)
+        assert root == ROOT_TASK
+        return walk(await self.task(), segments)
+
+    async def values(self, paths: list[str]) -> dict[str, Any]:
+        return {path: await self.get(path) for path in paths}
+
+    async def fill(self, template: str) -> tuple[str, bool]:
+        return fill(template, await self.values(placeholders(template)))
+
+
+class RuleSkipped(Exception):
+    """This rule does nothing with this event; the reason goes to the log."""
+
+
+class RuleEventHandler:
+    """``control_plane_client.events.Handler``: one journal event, the rules of the moment."""
 
     def __init__(
         self,
         sender: NotificationSender,
         core: Core,
         identity: SenderIdentity,
-        *,
-        task_url_template: str = "",
+        rules: RuleSource,
     ) -> None:
         self._sender = sender
         self._core = core
         self._identity = identity
-        self._task_url = task_url_template
+        self._rules = rules
 
     async def __call__(self, event: Event) -> None:
-        kind = event.get("type")
-        try:
-            if kind == REQUESTED:
-                await self._requested(event)
-            elif kind in CLOSING:
-                await self._closed(event, CLOSING[kind])
-            elif kind == VERIFICATION_FAILED:
-                await self._verification_failed(event)
-            # Other ``approval.*`` (outcome execution) tell people nothing here.
-        except (KeyError, ValueError):
-            # A payload outside its catalog schema: retrying cannot fix it, and
-            # raising would hold every later event behind it.
-            logger.exception("event %s (%s) is malformed; skipped", event.get("id"), kind)
+        identity = await self._identity()
+        kind = str(event.get("type"))
+        facts = EventFacts(event, self._core)
+        # The versions in force now: an event read under an older filter that
+        # no rule describes any more is simply passed over.
+        for rule in await self._rules(identity.tenant_id):
+            try:
+                if on_matches(rule.spec, kind):
+                    await self._open(rule, facts, identity)
+                if closes_on(rule.spec, kind):
+                    await self._close(rule, facts, identity)
+            except RuleSkipped as skipped:
+                logger.info("rule %s, event %s (%s): %s", rule.key, event.get("id"), kind, skipped)
+            except (ConditionError, KeyError, ValueError, ValidationError):
+                # A broken rule or a payload outside its catalog schema:
+                # retrying cannot fix it, and raising would hold every later
+                # event behind it. The other rules still run.
+                logger.exception("rule %s failed on event %s (%s)", rule.key, event.get("id"), kind)
 
-    # -- approvals ------------------------------------------------------------
+    # -- a notification ---------------------------------------------------------------
 
-    async def _requested(self, event: Event) -> None:
-        payload: dict[str, Any] = event.get("payload") or {}
-        approval_id = str(event["entityId"])
-        recipient = self._decider(event, payload)
+    async def _open(
+        self, rule: ActiveRule, facts: EventFacts, identity: TrustedAuthContext
+    ) -> None:
+        spec = rule.spec
+        when = spec["on"].get("when", True)
+        values = await facts.values([path for path, _ in condition_paths(when)])
+        if not evaluate(when, values.__getitem__):
+            return
+        recipient = await self._recipient(spec["recipient"], facts)
         if recipient is None:
-            logger.warning(
-                "approval %s: neither an assigned principal nor a role in a workspace; "
-                "nobody to notify",
-                approval_id,
-            )
-            return
-
-        # Version 2 carries the task's id and title; for older events they are
-        # read from the core (FR-008: carried or readable).
-        task_id = payload.get("taskId")
-        public_id = payload.get("taskPublicId")
-        title = payload.get("taskTitle")
-        if task_id and public_id is None and title is None:
-            task = await self._core.task(str(task_id))
-            if task is not None:
-                public_id, title = task.get("publicId"), task.get("title")
-        requester = payload.get("requestedBy") or event.get("actorId")
-        requester_name = await self._core.principal_name(str(requester)) if requester else None
-
-        work = " ".join(str(part) for part in (public_id, title) if part)
-        lines = []
-        if work:
-            lines.append(f"Работа: {work}")
-        if requester_name:
-            lines.append(f"Запрашивает: {requester_name}")
-        comment = payload.get("comment")
-        if comment:
-            lines.append(f"Комментарий: {comment}")
-        await self._send(
-            NotificationCreate(
-                recipient=recipient,
-                type=REQUESTED,
-                title=_line(f"Нужно решение: {work}" if work else "Нужно решение", MAX_TITLE),
-                body=_text("\n".join(lines), MAX_BODY),
-                links=self._task_links(task_id, public_id),
-                actions=[
-                    Action(
-                        id="approve",
-                        label="Одобрить",
-                        data={"kind": DECIDE, "approvalId": approval_id, "decision": "approve"},
-                    ),
-                    Action(
-                        id="reject",
-                        label="Отклонить",
-                        data={"kind": DECIDE, "approvalId": approval_id, "decision": "reject"},
-                    ),
-                ],
-            ),
-            approval_key(approval_id),
-            event,
+            raise RuleSkipped("nobody to notify")
+        key = await self._dedup_key(rule, facts)
+        notification: Mapping[str, Any] = spec["notification"]
+        title, _ = await facts.fill(notification["title"])
+        payload = NotificationCreate(
+            recipient=recipient,
+            type=notification["type"],
+            title=_line(title, MAX_TITLE) or notification["type"],
+            body=_text(await self._body(notification.get("body", ""), facts), MAX_BODY),
+            links=await self._links(notification.get("links", []), facts),
+            actions=self._actions(notification.get("actions", []), facts),
         )
-
-    @staticmethod
-    def _decider(event: Event, payload: dict[str, Any]) -> Recipient | None:
-        assigned = payload.get("assignedPrincipalId")
-        if assigned:
-            return Recipient(kind="principal", id=uuid.UUID(str(assigned)))
-        role = payload.get("requiredRoleId")
-        workspace = payload.get("workspaceId") or event.get("workspaceId")
-        if role and workspace:
-            return Recipient(
-                kind="role", id=uuid.UUID(str(role)), workspace_id=uuid.UUID(str(workspace))
-            )
-        return None
-
-    async def _closed(self, event: Event, status: str) -> None:
-        payload: dict[str, Any] = event.get("payload") or {}
-        by = payload.get("decisionBy") or payload.get("cancelledBy") or event.get("actorId")
-        outcome = {
-            "status": status,
-            "by": str(by) if by else None,
-            "channel": payload.get("channel"),
-            "at": event.get("occurredAt"),
-        }
-        identity = await self._identity()
-        closed = await self._sender.close_actions(
-            identity.tenant_id,
-            identity.principal_id,
-            approval_key(str(event["entityId"])),
-            {key: value for key, value in outcome.items() if value is not None},
-        )
-        if closed is None:
-            logger.info("approval %s %s: no notification to close", event["entityId"], status)
-
-    # -- verification ---------------------------------------------------------
-
-    async def _verification_failed(self, event: Event) -> None:
-        payload: dict[str, Any] = event.get("payload") or {}
-        task_id = str(payload.get("taskId") or event["entityId"])
-        task = await self._core.task(task_id)
-        if task is None:
-            logger.info("verification of task %s failed, but the task cannot be read", task_id)
-            return
-        person = task.get("ownerId") or task.get("assigneeId")
-        if not person:
-            logger.info("verification of task %s failed; the task has nobody to tell", task_id)
-            return
-        public_id = payload.get("publicId") or task.get("publicId")
-        work = " ".join(str(part) for part in (public_id, task.get("title")) if part)
-        check = payload.get("failedCheck")
-        reason = payload.get("reason")
-        lines = [
-            f"Попытка {payload.get('attempt')}: не пройдена проверка «{check}»"
-            + (f" ({reason})" if reason else "")
-            + "."
-        ]
-        status = payload.get("status")
-        if payload.get("blocked"):
-            lines.append(
-                f"{payload.get('consecutiveFailures')} неудачных попыток подряд — "
-                f"задача ждёт человека (статус {status})."
-            )
-        else:
-            lines.append(f"Задача вернулась в работу (статус {status}).")
-        await self._send(
-            NotificationCreate(
-                recipient=Recipient(kind="principal", id=uuid.UUID(str(person))),
-                type=VERIFICATION_FAILED,
-                title=_line(f"Проверка не пройдена: {work}", MAX_TITLE),
-                body=_text("\n".join(lines), MAX_BODY),
-                links=self._task_links(task_id, public_id),
-            ),
-            event_key(str(event["id"])),
-            event,
-        )
-
-    # -- shared ---------------------------------------------------------------
-
-    def _task_links(self, task_id: object, public_id: object) -> list[Link]:
-        if not (self._task_url and task_id):
-            return []
-        try:
-            url = self._task_url.format(taskId=task_id, taskPublicId=public_id or task_id)
-            return [Link(label="Открыть задачу", url=url)]  # type: ignore[arg-type]
-        except (KeyError, IndexError, ValueError):
-            logger.warning("NS_TASK_URL_TEMPLATE does not give a URL; the link is left out")
-            return []
-
-    async def _send(self, payload: NotificationCreate, key: str, event: Event) -> None:
-        identity = await self._identity()
         try:
             await self._sender.accept(identity, payload, key)
         except Unprocessable as exc:
             # The addressee does not exist for the directory (a removed
             # principal or role): no retry will change that.
-            logger.warning("event %s (%s): %s", event.get("id"), event.get("type"), exc.message)
-        except Conflict:
+            raise RuleSkipped(exc.message) from exc
+        except Conflict as exc:
             # The key was already used with another text: the notification
             # exists (the event is handled again, and something it is built
             # from — a display name — changed meanwhile).
-            logger.info("event %s: already notified under %s", event.get("id"), key)
+            raise RuleSkipped(f"already notified under {key}") from exc
         # Unavailable (the directory is down) propagates: the event is retried.
+
+    async def _recipient(self, recipient: Mapping[str, Any], facts: EventFacts) -> Recipient | None:
+        kind = recipient["kind"]
+        found: Recipient | None = None
+        if kind == "principal":
+            found = _principal(recipient["ref"])
+        elif kind == "assigned":
+            found = _principal(await facts.get(recipient.get("ref") or DEFAULT_ASSIGNED_REF))
+            if found is None:
+                workspace = (
+                    await facts.get(recipient["workspace"])
+                    if recipient.get("workspace")
+                    else (
+                        await facts.get("payload.workspaceId")
+                        or await facts.get("event.workspaceId")
+                    )
+                )
+                found = _role(await facts.get("payload.requiredRoleId"), workspace)
+        elif kind == "role":
+            found = _role(
+                await facts.get(recipient["ref"]),
+                await facts.get(recipient.get("workspace") or "event.workspaceId"),
+            )
+        else:
+            found = await _task_person(kind, facts)
+        if found is None:
+            found = await _task_person(recipient.get("fallback", "none"), facts)
+        return found
+
+    @staticmethod
+    async def _body(template: str, facts: EventFacts) -> str:
+        lines = []
+        for line in template.split("\n"):
+            text, empty = await facts.fill(line)
+            # A line whose every placeholder is empty is left out ("Комментарий: …").
+            if not empty:
+                lines.append(text)
+        return "\n".join(lines)
+
+    @staticmethod
+    async def _links(links: list[Mapping[str, str]], facts: EventFacts) -> list[Link]:
+        built = []
+        for link in links:
+            url, _ = await facts.fill(link["url"])
+            url_values = await facts.values(placeholders(link["url"]))
+            if any(not text for text in map(_scalar_text, url_values.values())):
+                continue
+            label, _ = await facts.fill(link["label"])
+            if not _ABSOLUTE_URL.match(url):
+                continue
+            try:
+                built.append(Link(label=_line(label, MAX_LINK_LABEL), url=url))  # type: ignore[arg-type]
+            except ValidationError:
+                continue
+        return built
+
+    @staticmethod
+    def _actions(actions: list[str], facts: EventFacts) -> list[Action]:
+        if APPROVAL_DECIDE not in actions:
+            return []
+        # Events ``approval.*`` are about the approval: its id is the entity's.
+        approval_id = str(facts.event["entityId"])
+        return [
+            Action(
+                id="approve",
+                label="Одобрить",
+                data={"kind": DECIDE, "approvalId": approval_id, "decision": "approve"},
+            ),
+            Action(
+                id="reject",
+                label="Отклонить",
+                data={"kind": DECIDE, "approvalId": approval_id, "decision": "reject"},
+            ),
+        ]
+
+    @staticmethod
+    async def _dedup_key(rule: ActiveRule, facts: EventFacts) -> str:
+        template = dedup_template(rule.key, rule.spec)
+        values = await facts.values(placeholders(template))
+        if any(not _scalar_text(value) for value in values.values()):
+            # A key missing a part would merge notifications of unrelated events.
+            raise RuleSkipped("the dedup key has an empty part")
+        key, _ = fill(template, values)
+        if len(key) > MAX_DEDUP_KEY:
+            raise RuleSkipped(f"the dedup key is longer than {MAX_DEDUP_KEY}")
+        return key
+
+    # -- closing its actions ---------------------------------------------------------
+
+    async def _close(
+        self, rule: ActiveRule, facts: EventFacts, identity: TrustedAuthContext
+    ) -> None:
+        key = await self._dedup_key(rule, facts)
+        event = facts.event
+        status = ""
+        template = (rule.spec.get("close") or {}).get("outcome")
+        if template:
+            status = _line((await facts.fill(template))[0], MAX_OUTCOME)
+        outcome = {
+            # By default the last segment of the type: approved, rejected, cancelled.
+            "status": status or str(event["type"]).rsplit(".", 1)[-1],
+            "by": event.get("actorId"),
+            "channel": facts.payload.get("channel"),
+            "at": event.get("occurredAt"),
+        }
+        closed = await self._sender.close_actions(
+            identity.tenant_id,
+            identity.principal_id,
+            key,
+            {name: value for name, value in outcome.items() if value is not None},
+        )
+        if closed is None:
+            logger.info(
+                "rule %s, event %s: no notification %s to close", rule.key, event.get("id"), key
+            )
+
+
+def _scalar_text(value: Any) -> str:
+    if value is None or isinstance(value, (dict, list)):
+        return ""
+    return str(value)
+
+
+def _principal(value: Any) -> Recipient | None:
+    if not value:
+        return None
+    return Recipient(kind="principal", id=uuid.UUID(str(value)))
+
+
+def _role(role: Any, workspace: Any) -> Recipient | None:
+    if not (role and workspace):
+        return None
+    return Recipient(kind="role", id=uuid.UUID(str(role)), workspace_id=uuid.UUID(str(workspace)))
+
+
+async def _task_person(kind: str, facts: EventFacts) -> Recipient | None:
+    if kind == "taskOwner":
+        return _principal(await facts.get("task.ownerId"))
+    if kind == "taskAssignee":
+        return _principal(await facts.get("task.assigneeId"))
+    return None
+
+
+# --- the consumer on the rules' filter --------------------------------------------------------
+
+
+class RuleConsumer:
+    """Runs the SDK consumer on the filter of the enabled rules; none of them — no consumer.
+
+    Every ``poll_seconds`` (or on :meth:`wake`) the rules of the service's
+    tenant are read again; a different filter stops the running consumer and
+    starts one on the new filter under the same name, so it resumes from the
+    same stored cursor.
+    """
+
+    def __init__(
+        self,
+        build: Callable[[tuple[str, ...]], EventConsumer],
+        rules: RuleSource,
+        identity: SenderIdentity,
+        *,
+        poll_seconds: float,
+    ) -> None:
+        self.build = build
+        self._rules = rules
+        self._identity = identity
+        self._poll_seconds = poll_seconds
+        self.types: tuple[str, ...] = ()
+        self.consumer: EventConsumer | None = None
+        self._task: asyncio.Task[None] | None = None
+        self._wake = asyncio.Event()
+        self._stopping = asyncio.Event()
+
+    def stop(self) -> None:
+        self._stopping.set()
+        self._wake.set()
+
+    def wake(self) -> None:
+        """Read the rules now: one was applied or retired."""
+        self._wake.set()
+
+    async def run(self) -> None:
+        try:
+            while not self._stopping.is_set():
+                self._wake.clear()
+                try:
+                    identity = await self._identity()
+                    types = subscription(r.spec for r in await self._rules(identity.tenant_id))
+                except Exception:
+                    # IAM or the database is down: the running consumer keeps
+                    # its filter until the rules can be read again.
+                    logger.exception("notification rules cannot be read; the filter stays")
+                else:
+                    if types != self.types:
+                        await self._switch(types)
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(self._wake.wait(), self._poll_seconds)
+        finally:
+            await self._switch(())
+
+    async def _switch(self, types: tuple[str, ...]) -> None:
+        if self.consumer is not None and self._task is not None:
+            self.consumer.stop()
+            # The event in hand is finished; a read hanging on the core is
+            # cancelled — its event is simply read again on the new filter.
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._task, CONSUMER_STOP_SECONDS)
+        self.consumer, self._task = None, None
+        if types:
+            logger.info("reading core events of %s", ", ".join(types))
+        elif self.types:
+            logger.info("no enabled notification rule: core events are not read")
+        self.types = types
+        if types:
+            self.consumer = self.build(types)
+            self._task = asyncio.create_task(_run(self.consumer))
+
+
+async def _run(consumer: EventConsumer) -> None:
+    try:
+        await consumer.run()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        # The core refuses the subscription itself (no events.read, a
+        # credential it rejects): rereading changes nothing until an operator
+        # fixes the grant or the rules change. The API and delivery keep working.
+        logger.exception("event consumer stopped: the Control Plane refused the subscription")
 
 
 def build_consumer(
     settings: Settings,
     client: ControlPlaneClient,
     engine: AsyncEngine,
-    handler: CoreEventHandler,
+    handler: RuleEventHandler,
+    types: tuple[str, ...],
 ) -> EventConsumer:
     """The SDK consumer over the service's database (tables of migration ``0002``)."""
     return EventConsumer(
         client,
-        EVENT_TYPES,
+        types,
         settings.events_workspace_id or None,
         SqlAlchemyCursorStore(engine),
         handler,
