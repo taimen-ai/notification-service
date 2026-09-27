@@ -22,7 +22,11 @@ consumer of core events (N008,
 `approval.approved|rejected|cancelled`), and `task.verification_failed` into a
 notification to the task owner. Packages send notifications with the
 `notify.send@1` skill ([ADR-0004](docs/adr/0004-notify-send-skill.md), contract —
-[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)).
+[docs/skills/notify.send@1.json](docs/skills/notify.send@1.json)). Which events
+become notifications is moving from code to data: `NotificationRule` catalog
+objects applied to the service ([ADR-0005](docs/adr/0005-notification-rules-as-data.md);
+implementation — task C007 of `declarative-cycle`). The ADR registry is
+[docs/adr/README.md](docs/adr/README.md).
 
 ADRs are in Russian; English summaries on request.
 

@@ -1,0 +1,5374 @@
+{
+  "envelope": {
+    "id": "Event identifier (uuid); the key for deduplication",
+    "type": "Event type, see below",
+    "schemaVersion": "Version of the payload schema of this type",
+    "sequence": "Journal sequence number; an identifier, not the replay order",
+    "cursor": "Opaque replay cursor of the event",
+    "tenantId": "Tenant",
+    "entityType": "Entity the event is about",
+    "entityId": "Its identifier",
+    "workspaceId": "Workspace of the entity; null for tenant-level events",
+    "actorId": "Principal who acted; null for the core itself",
+    "iamActorId": "IAM identity of the actor, when there is one",
+    "occurredAt": "When it happened",
+    "correlationId": "Correlation of the request chain",
+    "causationId": "What caused it, when known",
+    "requestId": "Request that wrote it",
+    "sessionId": "Work session, when there is one",
+    "traceRunId": "Distributed trace id (X-Run-Id)",
+    "payload": "Data of the event, by the schema of (type, schemaVersion)"
+  },
+  "types": {
+    "agent.retired": {
+      "entityType": "agent",
+      "description": "An agent was retired: stopped, binding revoked, history kept.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "description": "The last revision of the agent"
+              },
+              "principalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 1000,
+                "description": "Reason given; credential-shaped material redacted, cut to the limit"
+              },
+              "releasedClaims": {
+                "type": "integer",
+                "description": "Active claims of the agent released to the queue"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "principalId",
+              "reason",
+              "releasedClaims",
+              "revision"
+            ]
+          }
+        }
+      }
+    },
+    "agent.revision_published": {
+      "entityType": "agent",
+      "description": "A new immutable revision of an agent spec was published (CP-ADR-0073 §2).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer"
+              },
+              "specHash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "previousRevision": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Null for the first revision of the key"
+              },
+              "executorKind": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Null for an identity without placement"
+              },
+              "placed": {
+                "type": "boolean",
+                "description": "False for placement none"
+              },
+              "permissionsChanged": {
+                "type": "boolean",
+                "description": "Identity (roles, permissions, capabilities) differs from the previous one"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "executorKind",
+              "key",
+              "permissionsChanged",
+              "placed",
+              "previousRevision",
+              "revision",
+              "specHash"
+            ]
+          }
+        }
+      }
+    },
+    "agent.state_changed": {
+      "entityType": "agent",
+      "description": "The desired state or replica count of an agent changed; no new revision.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "stopped"
+                ]
+              },
+              "replicas": {
+                "type": "integer"
+              },
+              "previousState": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "running",
+                  "stopped",
+                  null
+                ],
+                "description": "Null when the agent is first published"
+              },
+              "previousReplicas": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "previousReplicas",
+              "previousState",
+              "replicas",
+              "state"
+            ]
+          }
+        }
+      }
+    },
+    "agent.status_changed": {
+      "entityType": "agent",
+      "description": "The observed state of an agent changed: phase, reason, node or revision.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "running",
+                  "waiting_for_node",
+                  "crash_looping",
+                  "node_unavailable",
+                  "stopped"
+                ]
+              },
+              "previousPhase": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "pending",
+                  "running",
+                  "waiting_for_node",
+                  "crash_looping",
+                  "node_unavailable",
+                  "stopped",
+                  null
+                ],
+                "description": "Null on the first report"
+              },
+              "reasonCode": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Why it is not running, e.g. no_matching_node"
+              },
+              "node": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "observedRevision": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "node",
+              "observedAt",
+              "observedRevision",
+              "phase",
+              "previousPhase",
+              "reasonCode"
+            ]
+          }
+        }
+      }
+    },
+    "api_key.break_glass_issued": {
+      "entityType": "api_key",
+      "description": "A short-lived break-glass key was issued from the host shell (CP-ADR-0065).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "keyPrefix": {
+                "type": "string"
+              },
+              "permissions": {
+                "type": "array"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "ttlSeconds": {
+                "type": "integer"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "issuedBy": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "expiresAt",
+              "issuedBy",
+              "keyPrefix",
+              "permissions",
+              "principalId",
+              "reason",
+              "ttlSeconds"
+            ]
+          }
+        }
+      }
+    },
+    "api_key.created": {
+      "entityType": "api_key",
+      "description": "An API key was issued to a principal.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "keyPrefix": {
+                "type": "string"
+              },
+              "permissions": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "keyPrefix",
+              "permissions",
+              "principalId"
+            ]
+          }
+        }
+      }
+    },
+    "api_key.revoked": {
+      "entityType": "api_key",
+      "description": "An API key was revoked.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "keyPrefix": {
+                "type": "string"
+              },
+              "breakGlass": {
+                "type": "boolean"
+              },
+              "issuedBy": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "keyPrefix"
+            ]
+          }
+        }
+      }
+    },
+    "approval.approved": {
+      "entityType": "approval",
+      "description": "The approval was approved by an eligible principal.",
+      "currentVersion": 2,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "outcomeStatus": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "pending when the task type declares outcomes for this decision (CP-ADR-0061)"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "outcomeStatus",
+              "taskId"
+            ]
+          }
+        },
+        "2": {
+          "changes": "decisionBy, comment, channel",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "outcomeStatus": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "pending when the task type declares outcomes for this decision (CP-ADR-0061)"
+              },
+              "decisionBy": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Principal who decided"
+              },
+              "comment": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 1000,
+                "description": "Decision comment; credential-shaped material redacted, cut to the limit"
+              },
+              "channel": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Channel the decision came through when it was not a direct API call (e.g. telegram); null for a direct call"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "channel",
+              "comment",
+              "decisionBy",
+              "outcomeStatus",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "approval.cancelled": {
+      "entityType": "approval",
+      "description": "The pending approval was cancelled; nobody decides it any more.",
+      "currentVersion": 2,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "taskId"
+            ]
+          }
+        },
+        "2": {
+          "changes": "cancelledBy",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "cancelledBy": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Principal who cancelled"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "cancelledBy",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "approval.outcome_deferred": {
+      "entityType": "approval",
+      "description": "An outcome action waits for something (e.g. a skill invocation) before continuing.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "waitingAction": {
+                "type": "object"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "details",
+              "outcome",
+              "reason",
+              "taskId",
+              "waitingAction"
+            ]
+          }
+        }
+      }
+    },
+    "approval.outcome_executed": {
+      "entityType": "approval",
+      "description": "The outcome actions the task type declares for the decision were executed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "actions": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "actions",
+              "outcome",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "approval.outcome_failed": {
+      "entityType": "approval",
+      "description": "An outcome action failed; the remaining actions stay for replay.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "failedAction": {
+                "type": "object"
+              },
+              "actions": {
+                "type": "array"
+              },
+              "failureWorkTaskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "actions",
+              "failedAction",
+              "failureWorkTaskId",
+              "outcome",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "approval.rejected": {
+      "entityType": "approval",
+      "description": "The approval was rejected by an eligible principal.",
+      "currentVersion": 2,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "outcomeStatus": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "pending when the task type declares outcomes for this decision (CP-ADR-0061)"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "outcomeStatus",
+              "taskId"
+            ]
+          }
+        },
+        "2": {
+          "changes": "decisionBy, comment, channel",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "outcomeStatus": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "pending when the task type declares outcomes for this decision (CP-ADR-0061)"
+              },
+              "decisionBy": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Principal who decided"
+              },
+              "comment": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 1000,
+                "description": "Decision comment; credential-shaped material redacted, cut to the limit"
+              },
+              "channel": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Channel the decision came through when it was not a direct API call (e.g. telegram); null for a direct call"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "channel",
+              "comment",
+              "decisionBy",
+              "outcomeStatus",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "approval.requested": {
+      "entityType": "approval",
+      "description": "A decision was requested from a principal or from the holders of a role.",
+      "currentVersion": 2,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "requiredRoleId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Set when any holder of the role may decide"
+              },
+              "assignedPrincipalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Set when one principal decides"
+              },
+              "gate": {
+                "type": "boolean",
+                "description": "A gate holds the task's claim and completion until decided"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "assignedPrincipalId",
+              "gate",
+              "requiredRoleId",
+              "taskId"
+            ]
+          }
+        },
+        "2": {
+          "changes": "workspaceId, taskPublicId, taskTitle, requestedBy, comment",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "requiredRoleId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Set when any holder of the role may decide"
+              },
+              "assignedPrincipalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Set when one principal decides"
+              },
+              "gate": {
+                "type": "boolean",
+                "description": "A gate holds the task's claim and completion until decided"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "The approval's workspace, else its task's workspace"
+              },
+              "taskPublicId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Public id of the task, e.g. TASK-000123"
+              },
+              "taskTitle": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "requestedBy": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Principal who requested the decision"
+              },
+              "comment": {
+                "type": "string",
+                "maxLength": 1000,
+                "description": "Request comment; credential-shaped material redacted, cut to the limit"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "assignedPrincipalId",
+              "comment",
+              "gate",
+              "requestedBy",
+              "requiredRoleId",
+              "taskId",
+              "taskPublicId",
+              "taskTitle",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "artifact.content_purged": {
+      "entityType": "artifact",
+      "description": "The bytes of an artifact were removed by an administrator; the record stays.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "artifactId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "sizeBytes": {
+                "type": "integer"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 1000,
+                "description": "Reason given; credential-shaped material redacted, cut to the limit"
+              },
+              "objectDeleted": {
+                "type": "boolean",
+                "description": "False when other artifacts or uploads still need the object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "objectDeleted",
+              "reason",
+              "sha256",
+              "sizeBytes",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "artifact.content_read": {
+      "entityType": "artifact",
+      "description": "The bytes of an artifact were handed out (CP-ADR-0072 §5).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "artifactId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "forTaskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Receiving task when read as its input"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "The reader's running run on that task, if any"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "sizeBytes": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "forTaskId",
+              "runId",
+              "sha256",
+              "sizeBytes",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "artifact.created": {
+      "entityType": "artifact",
+      "description": "An artifact was recorded.",
+      "currentVersion": 2,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "uri": {},
+              "supersedesArtifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "skillInvocationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "ruleEvaluationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "verificationId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "name",
+              "runId",
+              "supersedesArtifactId",
+              "taskId",
+              "type",
+              "uri"
+            ]
+          }
+        },
+        "2": {
+          "changes": "sizeBytes, mediaType, sha256, contentState, typeVersion (CP-ADR-0072)",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "uri": {},
+              "supersedesArtifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "sizeBytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Size of the stored content; null without one"
+              },
+              "mediaType": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "contentState": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "stored",
+                  "purged"
+                ]
+              },
+              "typeVersion": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Version of the registered artifact type it was checked against"
+              },
+              "skillInvocationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "ruleEvaluationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "verificationId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "contentState",
+              "mediaType",
+              "name",
+              "runId",
+              "sha256",
+              "sizeBytes",
+              "supersedesArtifactId",
+              "taskId",
+              "type",
+              "typeVersion",
+              "uri"
+            ]
+          }
+        }
+      }
+    },
+    "artifact_type.created": {
+      "entityType": "artifact_type",
+      "description": "An artifact type version was created (CP-ADR-0072).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "mediaTypes": {
+                "type": "array"
+              },
+              "maxBytes": {
+                "type": "integer"
+              },
+              "declaresMetadataSchema": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "declaresMetadataSchema",
+              "key",
+              "maxBytes",
+              "mediaTypes",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "attention.feedback_recorded": {
+      "entityType": "attention_feedback",
+      "description": "A principal judged an item of its attention list (CP-ADR-0071).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Whose attention list the item was on"
+              },
+              "itemKey": {
+                "type": "string",
+                "description": "Stable key of the item: <ruleKey>:<entityId>"
+              },
+              "rule": {
+                "type": "string",
+                "description": "The rule that raised the item, as ruleKey@version"
+              },
+              "ruleKey": {
+                "type": "string"
+              },
+              "ruleVersion": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "reasonCode": {
+                "type": "string"
+              },
+              "entityType": {
+                "type": "string",
+                "description": "approval or task"
+              },
+              "entityId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "score": {
+                "type": "integer"
+              },
+              "verdict": {
+                "type": "string",
+                "description": "useful or not_needed"
+              },
+              "created": {
+                "type": "boolean",
+                "description": "false when the verdict replaced an earlier one"
+              },
+              "hasComment": {
+                "type": "boolean",
+                "description": "The comment itself stays with the feedback row"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "created",
+              "entityId",
+              "entityType",
+              "hasComment",
+              "itemKey",
+              "kind",
+              "principalId",
+              "reasonCode",
+              "rule",
+              "ruleKey",
+              "ruleVersion",
+              "score",
+              "verdict"
+            ]
+          }
+        }
+      }
+    },
+    "capability.assigned": {
+      "entityType": "principal",
+      "description": "A capability was assigned to the principal.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "capabilityId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "capabilityId"
+            ]
+          }
+        }
+      }
+    },
+    "capability.created": {
+      "entityType": "capability",
+      "description": "A capability was created.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "name"
+            ]
+          }
+        }
+      }
+    },
+    "capability.revoked": {
+      "entityType": "principal",
+      "description": "A capability was revoked from the principal.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "capabilityId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "capabilityId"
+            ]
+          }
+        }
+      }
+    },
+    "claim.expired": {
+      "entityType": "claim",
+      "description": "The lease of a claim ran out.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {},
+              "taskStatus": {
+                "type": "string"
+              },
+              "taskSystemStatusCategory": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "claim.released": {
+      "entityType": "claim",
+      "description": "The claim on a task ended: completed, released, cancelled or superseded.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {},
+              "taskStatus": {
+                "type": "string"
+              },
+              "taskSystemStatusCategory": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "reason",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "context_adapter.rebuilt": {
+      "entityType": "event_consumer",
+      "description": "The memory context adapter was rewound to rebuild its projection.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "consumer": {
+                "type": "string"
+              },
+              "fromCursor": {},
+              "toCursor": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "consumer",
+              "fromCursor",
+              "reason",
+              "toCursor"
+            ]
+          }
+        }
+      }
+    },
+    "context_adapter.redriven": {
+      "entityType": "event_consumer",
+      "description": "The memory context adapter was redriven past a parked event.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "consumer": {
+                "type": "string"
+              },
+              "wasParked": {
+                "type": "boolean"
+              },
+              "parkedReason": {},
+              "parkedEventId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "consumer",
+              "cursor",
+              "parkedEventId",
+              "parkedReason",
+              "reason",
+              "wasParked"
+            ]
+          }
+        }
+      }
+    },
+    "delegation.created": {
+      "entityType": "delegation",
+      "description": "A human delegated permissions to an agent.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "humanPrincipalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "agentPrincipalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "permissions": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "agentPrincipalId",
+              "humanPrincipalId",
+              "permissions"
+            ]
+          }
+        }
+      }
+    },
+    "delegation.revoked": {
+      "entityType": "delegation",
+      "description": "A delegation was revoked.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "event_journal.archived": {
+      "entityType": "event_journal",
+      "description": "Journal events were moved to the archive (ADR-0038).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "archived": {
+                "type": "integer"
+              },
+              "throughCursor": {
+                "type": "string"
+              },
+              "minAgeSeconds": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "archived",
+              "minAgeSeconds",
+              "throughCursor"
+            ]
+          }
+        }
+      }
+    },
+    "event_journal.pruned": {
+      "entityType": "event_journal",
+      "description": "Archived journal events were deleted.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "pruned": {
+                "type": "integer"
+              },
+              "throughCursor": {
+                "type": "string"
+              },
+              "minAgeSeconds": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "minAgeSeconds",
+              "pruned",
+              "throughCursor"
+            ]
+          }
+        }
+      }
+    },
+    "goal.created": {
+      "entityType": "goal",
+      "description": "A goal was created (CP-ADR-0062).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "goalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "ownerId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "parentGoalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "criteriaCount": {
+                "type": "integer"
+              },
+              "createdFrom": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "createdFrom",
+              "criteriaCount",
+              "goalId",
+              "ownerId",
+              "parentGoalId",
+              "status",
+              "title",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "goal.updated": {
+      "entityType": "goal",
+      "description": "Goal attributes or its status changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "goalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "changes": {},
+              "version": {
+                "type": "integer"
+              },
+              "fromStatus": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changes",
+              "goalId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "iam_binding.created": {
+      "entityType": "iam_binding",
+      "description": "An IAM identity was bound to a local principal (CP-ADR-0053).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "issuer": {
+                "type": "string"
+              },
+              "iamTenantId": {},
+              "iamPrincipalId": {},
+              "permissions": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "iamPrincipalId",
+              "iamTenantId",
+              "issuer",
+              "permissions",
+              "principalId"
+            ]
+          }
+        }
+      }
+    },
+    "iam_binding.revoked": {
+      "entityType": "iam_binding",
+      "description": "An IAM binding was revoked; the identity no longer enters.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "issuer": {
+                "type": "string"
+              },
+              "iamPrincipalId": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "iamPrincipalId",
+              "issuer",
+              "principalId"
+            ]
+          }
+        }
+      }
+    },
+    "iam_binding.updated": {
+      "entityType": "iam_binding",
+      "description": "The permissions of an IAM binding changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "issuer": {
+                "type": "string"
+              },
+              "iamTenantId": {},
+              "iamPrincipalId": {},
+              "permissions": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "iamPrincipalId",
+              "iamTenantId",
+              "issuer",
+              "permissions",
+              "principalId"
+            ]
+          }
+        }
+      }
+    },
+    "knowledge.pack_registered": {
+      "entityType": "knowledge_pack",
+      "description": "A domain knowledge pack version was registered.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {},
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "name",
+              "status",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "knowledge.packs_configured": {
+      "entityType": "workspace",
+      "description": "The knowledge packs of a workspace tree were configured.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "workspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "packs": {
+                "type": "array"
+              },
+              "strict": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "namespace",
+              "packs",
+              "strict",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "knowledge.snapshot_reconciled": {
+      "entityType": "workspace",
+      "description": "A knowledge snapshot was reconciled into the memory service (CP-ADR-0060).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "snapshotId": {},
+              "pack": {},
+              "source": {},
+              "observedAt": {},
+              "workspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "rootWorkspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "entityCount": {
+                "type": "integer"
+              },
+              "relationCount": {
+                "type": "integer"
+              },
+              "duplicate": {
+                "type": "boolean"
+              },
+              "counters": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "counters",
+              "duplicate",
+              "entityCount",
+              "namespace",
+              "observedAt",
+              "pack",
+              "relationCount",
+              "rootWorkspaceId",
+              "snapshotId",
+              "source",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "observation.recorded": {
+      "entityType": "observation",
+      "description": "An observation was recorded (ADR-0057).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "content": {},
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "source": {
+                "type": "string"
+              },
+              "dedupKey": {
+                "type": "string"
+              },
+              "externalRef": {
+                "type": "object"
+              },
+              "assertions": {
+                "type": "array"
+              },
+              "data": {
+                "type": "object"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "workspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "supersedes": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "content",
+              "kind",
+              "observedAt"
+            ]
+          }
+        }
+      }
+    },
+    "principal.created": {
+      "entityType": "principal",
+      "description": "A principal (human, agent or service) was created.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "displayName",
+              "kind"
+            ]
+          }
+        }
+      }
+    },
+    "project.archived": {
+      "entityType": "project",
+      "description": "The project was archived.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "workspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "version",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "project.config_revision_activated": {
+      "entityType": "project",
+      "description": "A configuration revision became the active one.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "integer"
+              },
+              "revisionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "revision",
+              "revisionId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "project.config_revision_created": {
+      "entityType": "project",
+      "description": "A new configuration revision of the project was drafted.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "integer"
+              },
+              "revisionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "comment": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "comment",
+              "revision",
+              "revisionId"
+            ]
+          }
+        }
+      }
+    },
+    "project.created": {
+      "entityType": "project",
+      "description": "A project was created on a workspace (ADR-0031).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "workspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "parentProjectId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "templateKey": {
+                "type": "string"
+              },
+              "templateVersion": {
+                "type": "integer"
+              },
+              "statusKey": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "parentProjectId",
+              "statusKey",
+              "systemStatusCategory",
+              "templateKey",
+              "templateVersion",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "project.external_reference_added": {
+      "entityType": "project",
+      "description": "A reference to an external system was attached to the project (ADR-0047).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "externalReferenceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "externalSystem": {
+                "type": "string"
+              },
+              "externalType": {
+                "type": "string"
+              },
+              "externalId": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "externalId",
+              "externalReferenceId",
+              "externalSystem",
+              "externalType"
+            ]
+          }
+        }
+      }
+    },
+    "project.external_reference_updated": {
+      "entityType": "project",
+      "description": "An external reference of the project changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "externalReferenceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "externalSystem": {
+                "type": "string"
+              },
+              "externalType": {
+                "type": "string"
+              },
+              "externalId": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "externalId",
+              "externalReferenceId",
+              "externalSystem",
+              "externalType"
+            ]
+          }
+        }
+      }
+    },
+    "project.status_changed": {
+      "entityType": "project",
+      "description": "The project moved to another status.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "fromStatusKey": {
+                "type": "string"
+              },
+              "fromSystemStatusCategory": {
+                "type": "string"
+              },
+              "statusKey": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              },
+              "comment": {},
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "comment",
+              "fromStatusKey",
+              "fromSystemStatusCategory",
+              "statusKey",
+              "systemStatusCategory",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "project.updated": {
+      "entityType": "project",
+      "description": "Project attributes changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "changes": {
+                "type": "array"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changes",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "project_template.created": {
+      "entityType": "project_template",
+      "description": "A project template version was created.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "initialStatus": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "displayName",
+              "initialStatus",
+              "key",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "project_template.deprecated": {
+      "entityType": "project_template",
+      "description": "A project template version was deprecated.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "role.assigned": {
+      "entityType": "principal",
+      "description": "A role was assigned to the principal, tenant-wide or in a workspace subtree.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "roleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "roleId",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "role.created": {
+      "entityType": "role",
+      "description": "A role was created, tenant-wide or in a workspace.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "name",
+              "slug",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "role.revoked": {
+      "entityType": "principal",
+      "description": "A role assignment was revoked.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "roleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "roleId",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "role.updated": {
+      "entityType": "role",
+      "description": "A role was renamed or redescribed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "changes": {},
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changes",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "rule.archived": {
+      "entityType": "rule",
+      "description": "A work rule was archived.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "goalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "trigger": {
+                "type": "object"
+              },
+              "skill": {},
+              "action": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "goalId",
+              "key",
+              "ruleId",
+              "skill",
+              "status",
+              "trigger",
+              "version",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "rule.created": {
+      "entityType": "rule",
+      "description": "A work rule was created (CP-ADR-0063).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "goalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "trigger": {
+                "type": "object"
+              },
+              "skill": {},
+              "action": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "goalId",
+              "key",
+              "ruleId",
+              "skill",
+              "status",
+              "trigger",
+              "version",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "rule.disabled": {
+      "entityType": "rule",
+      "description": "A work rule was disabled.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "goalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "trigger": {
+                "type": "object"
+              },
+              "skill": {},
+              "action": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "goalId",
+              "key",
+              "ruleId",
+              "skill",
+              "status",
+              "trigger",
+              "version",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "rule.enabled": {
+      "entityType": "rule",
+      "description": "A work rule was enabled.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "goalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "trigger": {
+                "type": "object"
+              },
+              "skill": {},
+              "action": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "goalId",
+              "key",
+              "ruleId",
+              "skill",
+              "status",
+              "trigger",
+              "version",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "rule.evaluated": {
+      "entityType": "rule",
+      "description": "A work rule was evaluated against a trigger.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "ruleKey": {
+                "type": "string"
+              },
+              "ruleVersion": {
+                "type": "integer"
+              },
+              "evaluationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "triggerRef": {},
+              "trigger": {
+                "type": "object"
+              },
+              "result": {
+                "type": "string"
+              },
+              "conditionMatched": {},
+              "evidence": {
+                "type": "array"
+              },
+              "skillInvocationId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "work": {},
+              "error": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "conditionMatched",
+              "error",
+              "evaluationId",
+              "evidence",
+              "result",
+              "ruleId",
+              "ruleKey",
+              "ruleVersion",
+              "skillInvocationId",
+              "trigger",
+              "triggerRef",
+              "work"
+            ]
+          }
+        }
+      }
+    },
+    "rule.updated": {
+      "entityType": "rule",
+      "description": "A work rule changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "goalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "trigger": {
+                "type": "object"
+              },
+              "skill": {},
+              "action": {
+                "type": "object"
+              },
+              "changes": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "changes",
+              "goalId",
+              "key",
+              "ruleId",
+              "skill",
+              "status",
+              "trigger",
+              "version",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "run.cancel_requested": {
+      "entityType": "run",
+      "description": "Cancellation of the run was requested.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "reason": {},
+              "controlMessageId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.cancelled": {
+      "entityType": "run",
+      "description": "The run was cancelled.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {},
+              "attempt": {
+                "type": "integer"
+              },
+              "controlMessageId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "reason",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.checkpointed": {
+      "entityType": "run",
+      "description": "The run left a checkpoint.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "checkpointId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "checkpointId",
+              "kind",
+              "seq",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.child.cancel_requested": {
+      "entityType": "run",
+      "description": "Cancellation of the child run was requested.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "childHandleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "correlationId": {},
+              "childRunId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "controlMessageId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "childHandleId",
+              "childRunId",
+              "controlMessageId",
+              "correlationId",
+              "reason"
+            ]
+          }
+        }
+      }
+    },
+    "run.child.launched": {
+      "entityType": "run",
+      "description": "The run launched a child task under a handle (ADR-0046).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "childHandleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "childTaskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "childTaskPublicId": {
+                "type": "string"
+              },
+              "correlationId": {},
+              "cancellationPolicy": {},
+              "depth": {
+                "type": "integer"
+              },
+              "grantSizes": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "cancellationPolicy",
+              "childHandleId",
+              "childTaskId",
+              "childTaskPublicId",
+              "correlationId",
+              "depth",
+              "grantSizes",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.child.resolved": {
+      "entityType": "run",
+      "description": "The child handle was resolved with the child's outcome.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "childHandleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "correlationId": {},
+              "childRunId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "outcome": {},
+              "resultHash": {},
+              "artifactRefs": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactRefs",
+              "childHandleId",
+              "childRunId",
+              "correlationId",
+              "outcome",
+              "resultHash"
+            ]
+          }
+        }
+      }
+    },
+    "run.child.revoked": {
+      "entityType": "run",
+      "description": "The child handle was revoked.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "childHandleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "correlationId": {},
+              "childTaskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "childHandleId",
+              "childTaskId",
+              "correlationId",
+              "reason"
+            ]
+          }
+        }
+      }
+    },
+    "run.child.started": {
+      "entityType": "run",
+      "description": "A run of the child task started.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "childHandleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "correlationId": {},
+              "childTaskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "childRunId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "childHandleId",
+              "childRunId",
+              "childTaskId",
+              "correlationId"
+            ]
+          }
+        }
+      }
+    },
+    "run.control_message.accepted": {
+      "entityType": "run",
+      "description": "A control message for the active turn was accepted (ADR-0044).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "controlMessageId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "operation": {},
+              "status": {
+                "type": "string"
+              },
+              "causalPosition": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "causalPosition",
+              "controlMessageId",
+              "operation",
+              "seq",
+              "status",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.control_message.applied": {
+      "entityType": "run",
+      "description": "A control message was applied.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "controlMessageId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "operation": {},
+              "status": {
+                "type": "string"
+              },
+              "causalPosition": {},
+              "safeBoundary": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "causalPosition",
+              "controlMessageId",
+              "operation",
+              "safeBoundary",
+              "seq",
+              "status",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.control_message.rejected": {
+      "entityType": "run",
+      "description": "A control message was rejected.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "controlMessageId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "operation": {},
+              "status": {
+                "type": "string"
+              },
+              "causalPosition": {},
+              "safeBoundary": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "causalPosition",
+              "controlMessageId",
+              "operation",
+              "safeBoundary",
+              "seq",
+              "status",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.control_message.superseded": {
+      "entityType": "run",
+      "description": "A control message was superseded.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "controlMessageId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "operation": {},
+              "status": {
+                "type": "string"
+              },
+              "causalPosition": {},
+              "safeBoundary": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "causalPosition",
+              "controlMessageId",
+              "operation",
+              "safeBoundary",
+              "seq",
+              "status",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.failed": {
+      "entityType": "run",
+      "description": "The run failed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {},
+              "attempt": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "reason",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.handoff_prepared": {
+      "entityType": "run",
+      "description": "The run prepared a handoff to another executor.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "checkpointId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "fencingToken": {
+                "type": "integer"
+              },
+              "reason": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "checkpointId",
+              "claimId",
+              "fencingToken",
+              "reason",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.manifest_compiled": {
+      "entityType": "run",
+      "description": "The effective harness manifest of the run was compiled (ADR-0043). No longer written since ADR-0073; kept for events already in the journal.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "manifestId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "baseHash": {},
+              "reason": {},
+              "modelAttempt": {},
+              "supersedesVersion": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "baseHash",
+              "manifestId",
+              "modelAttempt",
+              "reason",
+              "supersedesVersion",
+              "taskId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "run.manifest_ephemeral_recorded": {
+      "entityType": "run",
+      "description": "An ephemeral manifest change was recorded (ADR-0043). No longer written since ADR-0073; kept for events already in the journal.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "manifestId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "kind": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "kind",
+              "manifestId",
+              "seq",
+              "taskId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "run.started": {
+      "entityType": "run",
+      "description": "An execution attempt started under a claim.",
+      "currentVersion": 2,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "fencingToken": {
+                "type": "integer"
+              },
+              "instructionsHash": {},
+              "instructionsRefs": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "claimId",
+              "fencingToken",
+              "instructionsHash",
+              "instructionsRefs",
+              "taskId"
+            ]
+          }
+        },
+        "2": {
+          "changes": "agentRevisionId",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "fencingToken": {
+                "type": "integer"
+              },
+              "instructionsHash": {},
+              "instructionsRefs": {},
+              "agentRevisionId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Agent revision the run goes by (CP-ADR-0073 §7); null for executors that are not registered agents"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "agentRevisionId",
+              "attempt",
+              "claimId",
+              "fencingToken",
+              "instructionsHash",
+              "instructionsRefs",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.succeeded": {
+      "entityType": "run",
+      "description": "The run finished successfully.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "taskCompleted": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "taskCompleted",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "run.suspended": {
+      "entityType": "run",
+      "description": "The run was suspended, e.g. to wait for a decision.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {},
+              "attempt": {
+                "type": "integer"
+              },
+              "waitingForApprovalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "reason",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "session.closed": {
+      "entityType": "session",
+      "description": "A work session was closed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "releasedClaims": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "releasedClaims"
+            ]
+          }
+        }
+      }
+    },
+    "session.expired": {
+      "entityType": "session",
+      "description": "A work session expired; its claims were released.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "expiresAt": {},
+              "releasedClaims": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "expiresAt"
+            ]
+          }
+        }
+      }
+    },
+    "session.opened": {
+      "entityType": "session",
+      "description": "A harness opened a work session.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "clientName": {},
+              "harnessType": {},
+              "controlLevel": {},
+              "protocolVersion": {},
+              "onBehalfOf": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "clientName",
+              "controlLevel",
+              "expiresAt",
+              "harnessType",
+              "onBehalfOf",
+              "protocolVersion"
+            ]
+          }
+        }
+      }
+    },
+    "skill.assigned": {
+      "entityType": "principal",
+      "description": "A skill was assigned.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "skillId"
+            ]
+          }
+        }
+      }
+    },
+    "skill.invocation_cancelled": {
+      "entityType": "skill_invocation",
+      "description": "The invocation was cancelled.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "skill": {
+                "type": "string"
+              },
+              "version": {},
+              "attempt": {
+                "type": "integer"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "code": {},
+              "reason": {
+                "type": "string"
+              },
+              "wasRunning": {
+                "type": "boolean"
+              },
+              "cancelledBy": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "initiator": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "cancelledBy",
+              "code",
+              "initiator",
+              "reason",
+              "runId",
+              "skill",
+              "skillId",
+              "taskId",
+              "version",
+              "wasRunning"
+            ]
+          }
+        }
+      }
+    },
+    "skill.invocation_claimed": {
+      "entityType": "skill_invocation",
+      "description": "An executor took the invocation under a lease.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "fencingToken": {
+                "type": "integer"
+              },
+              "leaseExpiresAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "fencingToken",
+              "leaseExpiresAt",
+              "skillId"
+            ]
+          }
+        }
+      }
+    },
+    "skill.invocation_failed": {
+      "entityType": "skill_invocation",
+      "description": "The invocation failed for good.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "skill": {
+                "type": "string"
+              },
+              "version": {},
+              "attempt": {
+                "type": "integer"
+              },
+              "maxAttempts": {
+                "type": "integer"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "error": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "error",
+              "maxAttempts",
+              "runId",
+              "skill",
+              "skillId",
+              "taskId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "skill.invocation_requested": {
+      "entityType": "skill_invocation",
+      "description": "The core was asked to invoke a skill (CP-ADR-0056).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "skill": {
+                "type": "string"
+              },
+              "version": {},
+              "sideEffects": {},
+              "riskLevel": {},
+              "requestedBy": {
+                "type": "object"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "authorizationBasis": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "authorizationBasis",
+              "requestedBy",
+              "riskLevel",
+              "runId",
+              "sideEffects",
+              "skill",
+              "skillId",
+              "taskId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "skill.invocation_retry_scheduled": {
+      "entityType": "skill_invocation",
+      "description": "The attempt failed with a retryable error; another one is scheduled.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "maxAttempts": {
+                "type": "integer"
+              },
+              "availableAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "error": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "availableAt",
+              "error",
+              "maxAttempts",
+              "skillId"
+            ]
+          }
+        }
+      }
+    },
+    "skill.invocation_succeeded": {
+      "entityType": "skill_invocation",
+      "description": "The invocation finished; its result is an artifact.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "skill": {
+                "type": "string"
+              },
+              "version": {},
+              "attempt": {
+                "type": "integer"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "cost": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "attempt",
+              "cost",
+              "runId",
+              "skill",
+              "skillId",
+              "taskId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "skill.registered": {
+      "entityType": "skill",
+      "description": "A skill version was registered.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {},
+              "protocol": {},
+              "invocable": {
+                "type": "boolean"
+              },
+              "sideEffects": {},
+              "riskLevel": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "invocable",
+              "name",
+              "protocol",
+              "riskLevel",
+              "sideEffects",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "skill.revoked": {
+      "entityType": "principal",
+      "description": "A skill was revoked.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "skillId"
+            ]
+          }
+        }
+      }
+    },
+    "skill.updated": {
+      "entityType": "skill",
+      "description": "The description or status of a skill version changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "changedFields": {
+                "type": "array"
+              },
+              "rowVersion": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changedFields",
+              "rowVersion"
+            ]
+          }
+        }
+      }
+    },
+    "task.claimed": {
+      "entityType": "task",
+      "description": "An executor claimed the task under a lease.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "claimId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sessionId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "holderId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "fencingToken": {
+                "type": "integer"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "status": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "claimId",
+              "expiresAt",
+              "fencingToken",
+              "holderId",
+              "publicId",
+              "sessionId",
+              "status",
+              "systemStatusCategory",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "task.comment_added": {
+      "entityType": "task",
+      "description": "A comment was added to the task.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "commentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "authorPrincipalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "bodyLength": {
+                "type": "integer"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "authorPrincipalId",
+              "bodyLength",
+              "commentId",
+              "runId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "task.comment_edited": {
+      "entityType": "task",
+      "description": "A task comment was edited.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "commentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "authorPrincipalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "bodyLength": {
+                "type": "integer"
+              },
+              "runId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "authorPrincipalId",
+              "bodyLength",
+              "commentId",
+              "runId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "task.completed": {
+      "entityType": "task",
+      "description": "The task reached its completion status.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "verificationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "publicId",
+              "status",
+              "systemStatusCategory",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "task.completion_work_executed": {
+      "entityType": "task",
+      "description": "The completion work the task type declares was executed (ADR-0061).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "taskTypeId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "actions": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "actions",
+              "publicId",
+              "taskTypeId"
+            ]
+          }
+        }
+      }
+    },
+    "task.completion_work_failed": {
+      "entityType": "task",
+      "description": "An action of the completion work failed; the completion stands.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "taskTypeId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "failedAction": {
+                "type": "object"
+              },
+              "actions": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "actions",
+              "failedAction",
+              "publicId",
+              "taskTypeId"
+            ]
+          }
+        }
+      }
+    },
+    "task.context_pack_recorded": {
+      "entityType": "task",
+      "description": "The context pack assembled for the task on claim was recorded (CP-ADR-0064).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "contextPackId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "asOf": {
+                "type": "string"
+              },
+              "asOfMode": {
+                "type": "string"
+              },
+              "entities": {
+                "type": "integer"
+              },
+              "facts": {
+                "type": "integer"
+              },
+              "snapshots": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "asOf",
+              "asOfMode",
+              "claimId",
+              "contextPackId",
+              "entities",
+              "facts",
+              "publicId",
+              "snapshots"
+            ]
+          }
+        }
+      }
+    },
+    "task.created": {
+      "entityType": "task",
+      "description": "A task was created.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              },
+              "typeKey": {
+                "type": "string"
+              },
+              "typeVersion": {
+                "type": "integer"
+              },
+              "priority": {},
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "startDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dueDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "customFields": {
+                "type": "boolean"
+              },
+              "goalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "origin": {},
+              "acceptanceChecks": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "acceptanceChecks",
+              "customFields",
+              "dueDate",
+              "goalId",
+              "origin",
+              "priority",
+              "publicId",
+              "startDate",
+              "status",
+              "systemStatusCategory",
+              "title",
+              "typeKey",
+              "typeVersion",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "task.external_reference_added": {
+      "entityType": "task",
+      "description": "A reference to an external system was attached to the task (ADR-0047).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "externalReferenceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "externalSystem": {
+                "type": "string"
+              },
+              "externalType": {
+                "type": "string"
+              },
+              "externalId": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "externalId",
+              "externalReferenceId",
+              "externalSystem",
+              "externalType"
+            ]
+          }
+        }
+      }
+    },
+    "task.external_reference_updated": {
+      "entityType": "task",
+      "description": "An external reference of the task changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "externalReferenceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "externalSystem": {
+                "type": "string"
+              },
+              "externalType": {
+                "type": "string"
+              },
+              "externalId": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "externalId",
+              "externalReferenceId",
+              "externalSystem",
+              "externalType"
+            ]
+          }
+        }
+      }
+    },
+    "task.relation_added": {
+      "entityType": "task",
+      "description": "A relation to another task was added.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "relationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "toTaskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "relationId",
+              "toTaskId",
+              "type"
+            ]
+          }
+        }
+      }
+    },
+    "task.relation_removed": {
+      "entityType": "task",
+      "description": "A relation between tasks was removed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "relationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "fromTaskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "toTaskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "fromTaskId",
+              "relationId",
+              "toTaskId",
+              "type"
+            ]
+          }
+        }
+      }
+    },
+    "task.updated": {
+      "entityType": "task",
+      "description": "Task attributes or its status changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "changes": {},
+              "version": {
+                "type": "integer"
+              },
+              "fromStatus": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changes",
+              "publicId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "task.verification_failed": {
+      "entityType": "task",
+      "description": "An acceptance check failed; the task went back to its executor or got blocked.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "verificationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "trigger": {},
+              "checks": {
+                "type": "integer"
+              },
+              "results": {
+                "type": "array"
+              },
+              "failedCheck": {},
+              "reason": {},
+              "consecutiveFailures": {
+                "type": "integer"
+              },
+              "blocked": {
+                "type": "boolean"
+              },
+              "fromStatus": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "blocked",
+              "checks",
+              "consecutiveFailures",
+              "failedCheck",
+              "fromStatus",
+              "publicId",
+              "reason",
+              "results",
+              "status",
+              "systemStatusCategory",
+              "taskId",
+              "trigger",
+              "verificationId"
+            ]
+          }
+        }
+      }
+    },
+    "task.verification_started": {
+      "entityType": "task",
+      "description": "A verification attempt of the task's acceptance checks opened (CP-ADR-0067).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "verificationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "trigger": {},
+              "checks": {
+                "type": "integer"
+              },
+              "triggerRef": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "attempt",
+              "checks",
+              "publicId",
+              "taskId",
+              "trigger",
+              "verificationId"
+            ]
+          }
+        }
+      }
+    },
+    "task.verified": {
+      "entityType": "task",
+      "description": "Every acceptance check passed; the task is complete.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "verificationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "trigger": {},
+              "checks": {
+                "type": "integer"
+              },
+              "results": {
+                "type": "array"
+              },
+              "artifactId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "attempt",
+              "checks",
+              "publicId",
+              "results",
+              "taskId",
+              "trigger",
+              "verificationId"
+            ]
+          }
+        }
+      }
+    },
+    "task_type.created": {
+      "entityType": "task_type",
+      "description": "A task type version was created (ADR-0048).",
+      "currentVersion": 2,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "initialStatus": {},
+              "completionStatus": {},
+              "execution": {},
+              "declaresApprovalOutcomes": {
+                "type": "boolean"
+              },
+              "declaresContextProfile": {
+                "type": "boolean"
+              },
+              "declaresInstructions": {
+                "type": "boolean"
+              },
+              "declaresCompletionWork": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "completionStatus",
+              "declaresApprovalOutcomes",
+              "declaresCompletionWork",
+              "declaresContextProfile",
+              "declaresInstructions",
+              "displayName",
+              "execution",
+              "initialStatus",
+              "key",
+              "version"
+            ]
+          }
+        },
+        "2": {
+          "changes": "declaresArtifactSchema, inputs, outputs (CP-ADR-0072)",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "initialStatus": {},
+              "completionStatus": {},
+              "execution": {},
+              "declaresApprovalOutcomes": {
+                "type": "boolean"
+              },
+              "declaresContextProfile": {
+                "type": "boolean"
+              },
+              "declaresInstructions": {
+                "type": "boolean"
+              },
+              "declaresCompletionWork": {
+                "type": "boolean"
+              },
+              "declaresArtifactSchema": {
+                "type": "boolean"
+              },
+              "inputs": {
+                "type": "integer",
+                "description": "Number of declared artifact inputs"
+              },
+              "outputs": {
+                "type": "integer",
+                "description": "Number of declared artifact outputs"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "completionStatus",
+              "declaresApprovalOutcomes",
+              "declaresArtifactSchema",
+              "declaresCompletionWork",
+              "declaresContextProfile",
+              "declaresInstructions",
+              "displayName",
+              "execution",
+              "initialStatus",
+              "inputs",
+              "key",
+              "outputs",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "task_type.deprecated": {
+      "entityType": "task_type",
+      "description": "A task type version was deprecated.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "tenant.bootstrapped": {
+      "entityType": "tenant",
+      "description": "The tenant was created with its first administrator.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "adminPrincipalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "apiKeyId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "apiKeyPrefix": {
+                "type": "string"
+              },
+              "iamBindingId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "iamPrincipalId": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "adminPrincipalId",
+              "apiKeyId",
+              "apiKeyPrefix",
+              "iamBindingId",
+              "iamPrincipalId",
+              "slug"
+            ]
+          }
+        }
+      }
+    },
+    "work.derived": {
+      "entityType": "task",
+      "description": "A rule derived new work.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "ruleKey": {
+                "type": "string"
+              },
+              "ruleVersion": {
+                "type": "integer"
+              },
+              "evaluationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "publicId": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "array"
+              },
+              "action": {
+                "type": "string"
+              },
+              "dedupKey": {
+                "type": "string"
+              },
+              "created": {
+                "type": "boolean"
+              },
+              "approvalId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "created",
+              "dedupKey",
+              "evaluationId",
+              "evidence",
+              "publicId",
+              "ruleId",
+              "ruleKey",
+              "ruleVersion",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "work.reconciled": {
+      "entityType": "task",
+      "description": "A rule updated, cancelled or completed the work it derived earlier.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "ruleKey": {
+                "type": "string"
+              },
+              "ruleVersion": {
+                "type": "integer"
+              },
+              "evaluationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "publicId": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "array"
+              },
+              "action": {
+                "type": "string"
+              },
+              "dedupKey": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "array"
+              },
+              "verificationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "check": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "changes",
+              "dedupKey",
+              "evaluationId",
+              "evidence",
+              "publicId",
+              "ruleId",
+              "ruleKey",
+              "ruleVersion",
+              "taskId"
+            ]
+          }
+        }
+      }
+    },
+    "workspace.archived": {
+      "entityType": "workspace",
+      "description": "A workspace was archived.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "slug"
+            ]
+          }
+        }
+      }
+    },
+    "workspace.created": {
+      "entityType": "workspace",
+      "description": "A workspace was created.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "parentId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "typeKey": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "name",
+              "parentId",
+              "slug",
+              "typeKey"
+            ]
+          }
+        }
+      }
+    },
+    "workspace.member_added": {
+      "entityType": "workspace",
+      "description": "A principal became a member of the workspace.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "principalId"
+            ]
+          }
+        }
+      }
+    },
+    "workspace.member_removed": {
+      "entityType": "workspace",
+      "description": "A principal stopped being a member of the workspace.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "principalId"
+            ]
+          }
+        }
+      }
+    },
+    "workspace.moved": {
+      "entityType": "workspace",
+      "description": "A workspace moved under another parent.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "fromParentId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "toParentId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "fromParentId",
+              "toParentId"
+            ]
+          }
+        }
+      }
+    },
+    "workspace.updated": {
+      "entityType": "workspace",
+      "description": "Workspace attributes changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "changes": {},
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changes",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "workspace_type.archived": {
+      "entityType": "workspace_type",
+      "description": "A workspace type was archived.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key"
+            ]
+          }
+        }
+      }
+    },
+    "workspace_type.created": {
+      "entityType": "workspace_type",
+      "description": "A workspace type was created.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "allowedChildTypes": {}
+            },
+            "additionalProperties": true,
+            "required": [
+              "allowedChildTypes",
+              "displayName",
+              "key"
+            ]
+          }
+        }
+      }
+    },
+    "workspace_type.updated": {
+      "entityType": "workspace_type",
+      "description": "A workspace type changed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "changes": {},
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changes",
+              "version"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
