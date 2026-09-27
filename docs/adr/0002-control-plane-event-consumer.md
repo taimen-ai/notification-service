@@ -10,8 +10,9 @@
 > правила `NotificationRule`, применённые к сервису; прежнее поведение — три
 > правила пакета `notify`. Чтение журнала, курсор, отправитель, барьеры
 > дедупликации (ключи `control-plane:approval:<id>`, `control-plane:event:<id>`
-> сохраняются) и закрытые действия действуют. Код переходит в C007; до его
-> выкатки работает таблица ниже.
+> сохраняются) и закрытые действия действуют. Код перешёл в C007 (TASK-000646):
+> таблица ниже — историческая, её поведение закрепляет тест совместимости
+> `tests/test_notification_rules_compat.py`.
 
 Основание: `specs/notifications/` суперпроекта (spec — FR-008, SC-001, сценарий 1;
 plan — «Исследование» п. 5, 7, 9 и «Потоки»; tasks — N008), TAI-ADR-0048 п. 6,
@@ -122,6 +123,6 @@ tenant людей того tenant'а ядра, события которого �
 ```conformance
 - grep: {path: src/notification_service/events.py, pattern: 'from control_plane_client.events import'}
 - grep: {path: src/notification_service/events.py, pattern: 'SqlAlchemyCursorStore\(engine\)'}
-- grep: {path: src/notification_service/events.py, pattern: 'control-plane:approval:'}
+- grep: {path: tests/test_notification_rules_compat.py, pattern: 'control-plane:approval:'}
 - grep: {path: src/notification_service/worker.py, pattern: 'actions_closed_at'}
 ```

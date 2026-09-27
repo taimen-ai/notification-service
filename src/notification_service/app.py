@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 
 import httpx
 from control_plane_client import ControlPlaneClient
-from control_plane_client.events import EventConsumer
 from fastapi import FastAPI
 from platform_auth import (
     JwksCache,
@@ -50,10 +49,13 @@ from notification_service.directory import (
     UnconfiguredDirectory,
 )
 from notification_service.events import (
+    CONSUMER_STOP_SECONDS,
     ControlPlaneCore,
-    CoreEventHandler,
+    RuleConsumer,
+    RuleEventHandler,
     ServiceIdentity,
     build_consumer,
+    stored_rules,
 )
 from notification_service.harness import HarnessInbound, LauncherInbound
 from notification_service.sending import NotificationSender
@@ -68,7 +70,6 @@ CONTROL_PLANE_AUDIENCE = "control-plane"
 # The core's read scope: without a scope in the exchange IAM issues a token that
 # carries none, and every read of the core answers insufficient_scope.
 CONTROL_PLANE_SCOPES = ("control-plane:read",)
-CONSUMER_STOP_SECONDS = 10.0
 
 
 @dataclass
@@ -129,23 +130,26 @@ def build_event_consumer(
     connection: ControlPlaneConnection,
     engine: AsyncEngine,
     sender: NotificationSender,
-) -> EventConsumer | None:
-    """The consumer of core events; it needs the service's identity, hence IAM."""
+) -> RuleConsumer | None:
+    """The consumer of core events on the rules' filter; it needs the service's identity."""
     if not (settings.events_enabled and settings.jwks_url and settings.iam_issuer):
         return None
     # The service's own token is addressed to the Control Plane: verified with
-    # that audience, it names the sender of the notifications built from events.
+    # that audience, it names the sender of the notifications built from events
+    # and the tenant whose rules run.
     own_tokens = TokenVerifier(
         JwksCache(settings.jwks_url),
         VerifierConfig(issuer=settings.iam_issuer, audience=CONTROL_PLANE_AUDIENCE),
     )
-    handler = CoreEventHandler(
-        sender,
-        ControlPlaneCore(connection.client),
-        ServiceIdentity(connection.tokens, own_tokens),
-        task_url_template=settings.task_url_template,
+    identity = ServiceIdentity(connection.tokens, own_tokens)
+    rules = stored_rules(session_factory(engine))
+    handler = RuleEventHandler(sender, ControlPlaneCore(connection.client), identity, rules)
+    return RuleConsumer(
+        lambda types: build_consumer(settings, connection.client, engine, handler, types),
+        rules,
+        identity,
+        poll_seconds=settings.events_poll_seconds,
     )
-    return build_consumer(settings, connection.client, engine, handler)
 
 
 def build_channel_links(settings: Settings) -> IamChannelLinks | None:
@@ -189,18 +193,6 @@ def build_harness(settings: Settings) -> LauncherInbound | None:
         ),
     )
     return LauncherInbound(settings.harness_launcher_url, tokens)
-
-
-async def run_event_consumer(consumer: EventConsumer) -> None:
-    try:
-        await consumer.run()
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        # The core refuses the subscription itself (no events.read, a
-        # credential it rejects): rereading changes nothing until an operator
-        # fixes the grant. The API and delivery keep working.
-        logger.exception("event consumer stopped: the Control Plane refused the subscription")
 
 
 def create_app(settings: Settings | None = None, overrides: Overrides | None = None) -> FastAPI:
@@ -291,7 +283,7 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
 
         stop = asyncio.Event()
         task = asyncio.create_task(worker.run(stop)) if settings.worker_enabled else None
-        events = asyncio.create_task(run_event_consumer(consumer)) if consumer else None
+        events = asyncio.create_task(consumer.run()) if consumer else None
         try:
             yield
         finally:

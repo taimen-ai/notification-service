@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,8 @@ import yaml
 from control_plane.api.v1.schemas import TaskOut
 from control_plane.domain.event_catalog import catalog_document
 from jsonschema import Draft202012Validator
+
+from notification_service import rules
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "src" / "notification_service" / "contracts"
@@ -177,3 +180,138 @@ def test_adr_rule_is_valid_against_schema_and_catalog(rule: dict[str, Any]) -> N
         check(path, on_types + close_types)
     if "approvalDecide" in notification.get("actions", []):
         assert {catalog["types"][t]["entityType"] for t in on_types} == {"approval"}
+
+
+# --- the service's own check and evaluator against the core ---------------------------
+
+
+def _json_type(schema: dict[str, Any]) -> str:
+    if "$ref" in schema:
+        return "object"
+    if "anyOf" in schema:
+        [kind] = [_json_type(s) for s in schema["anyOf"] if s.get("type") != "null"]
+        return kind
+    return str(schema["type"])
+
+
+def test_task_fields_are_the_task_projection_of_the_core() -> None:
+    properties = TaskOut.model_json_schema(by_alias=True)["properties"]
+    assert {name: _json_type(s) for name, s in properties.items()} == rules.TASK_FIELDS
+
+
+def test_the_event_the_core_serializes_has_only_envelope_fields() -> None:
+    from core_events import requested
+
+    body = requested(uuid.uuid4())
+    assert set(body) - {"payload"} <= rules.catalog().envelope
+
+
+@pytest.mark.parametrize("rule", _adr_rules(), ids=lambda rule: rule["key"])
+def test_the_service_check_accepts_the_adr_rules(rule: dict[str, Any]) -> None:
+    assert rules.check_spec(rule["spec"]) == []
+
+
+FACTS: dict[str, Any] = {
+    "payload": {"n": 3, "s": "abc", "flag": True, "items": ["a", "b"], "none": None},
+    "event": {"type": "approval.requested"},
+    "task": {"title": "T"},
+}
+CONDITIONS: list[Any] = [
+    True,
+    False,
+    {"eq": [{"var": "payload.n"}, 3]},
+    {"eq": [{"var": "payload.flag"}, 1]},
+    {"ne": [{"var": "payload.flag"}, True]},
+    {"lt": [{"var": "payload.n"}, 5]},
+    {"ge": [{"var": "payload.s"}, "abd"]},
+    {"gt": [{"var": "payload.none"}, 1]},
+    {"lt": [{"var": "payload.s"}, 1]},
+    {"in": [{"var": "payload.s"}, {"const": ["abc", "x"]}]},
+    {"in": ["a", {"var": "payload.items"}]},
+    {"in": ["a", {"var": "payload.s"}]},
+    {"in": ["a", {"var": "payload.none"}]},
+    {"exists": "payload.none"},
+    {"exists": "task.title"},
+    {"and": [{"exists": "payload.n"}, {"not": {"eq": [{"var": "event.type"}, "x"]}}]},
+    {"or": [False, {"eq": [{"var": "payload.items.1"}, "b"]}]},
+    {"eq": [{"eq": [{"var": "payload.n"}, 3]}, True]},
+    # Outside the grammar.
+    {"bogus": []},
+    {"and": []},
+    {"eq": [1]},
+    {"eq": [1, 2], "ne": [1, 2]},
+    {"exists": "goal.id"},
+    {"eq": [{"var": "payload..x"}, 1]},
+    "payload.n",
+    {
+        "not": {
+            "not": {
+                "not": {
+                    "not": {
+                        "not": {
+                            "not": {
+                                "not": {
+                                    "not": {
+                                        "not": {
+                                            "not": {
+                                                "not": {
+                                                    "not": {
+                                                        "not": {
+                                                            "not": {"not": {"not": {"not": True}}}
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+]
+
+
+def _core_answer(expression: Any) -> Any:
+    from control_plane.domain import work_rules
+    from control_plane.domain.errors import ValidationError
+
+    # The core's roots for event rules (``trigger`` and ``goal`` unused here);
+    # ``event`` is the service's root: the core reads the envelope as ``trigger``.
+    roots = frozenset({"payload", "event", "task"})
+    try:
+        work_rules.validate_expression(expression, roots=roots)
+    except ValidationError:
+        return "invalid"
+    try:
+        return work_rules.evaluate(
+            expression,
+            lambda path: work_rules.walk(FACTS[path.root], path.segments),
+            roots=roots,
+        )
+    except work_rules.ConditionError:
+        return "error"
+
+
+def _service_answer(expression: Any) -> Any:
+    try:
+        rules.condition_paths(expression)
+    except rules.ConditionInvalid:
+        return "invalid"
+
+    def resolve(path: str) -> Any:
+        root, *segments = path.split(".")
+        return rules.walk(FACTS[root], segments)
+
+    try:
+        return rules.evaluate(expression, resolve)
+    except rules.ConditionError:
+        return "error"
+
+
+@pytest.mark.parametrize("expression", CONDITIONS, ids=lambda e: json.dumps(e)[:60])
+def test_conditions_answer_as_the_core_evaluator(expression: Any) -> None:
+    assert _service_answer(expression) == _core_answer(expression)

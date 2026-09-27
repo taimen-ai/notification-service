@@ -1,10 +1,10 @@
 """Contract: what the event consumer reads from the Control Plane, against the core's own code.
 
-The fields the handler takes from event payloads are checked against the
-core's event catalog (``control_plane.domain.event_catalog``), the fields it
-takes from tasks and principals against the API models, and the reads of
-``ControlPlaneCore`` against responses serialized by those models. A change on
-the core's side breaks this test rather than notifications in production.
+The fields the rules take from tasks and principals are checked against the
+API models, and the reads of ``ControlPlaneCore`` against responses serialized
+by those models. What rules may read from event payloads is checked against
+the catalog snapshot (``test_notification_rules_contract``). A change on the
+core's side breaks this test rather than notifications in production.
 """
 
 from __future__ import annotations
@@ -17,62 +17,11 @@ import httpx
 import pytest
 from control_plane.api.v1.org import router as org_router
 from control_plane.api.v1.schemas import PrincipalOut, RoleHolderOut, TaskOut
-from control_plane.domain.event_catalog import current_version, schema_for
 from control_plane_client import ControlPlaneClient, ControlPlaneError
 
-from notification_service.events import CLOSING, REQUESTED, VERIFICATION_FAILED, ControlPlaneCore
+from notification_service.events import ControlPlaneCore
 
 NOW = datetime(2026, 9, 25, tzinfo=UTC)
-
-# Payload fields the handler reads, per event type (``events.CoreEventHandler``).
-READS = {
-    REQUESTED: {
-        "taskId",
-        "assignedPrincipalId",
-        "requiredRoleId",
-        "workspaceId",
-        "taskPublicId",
-        "taskTitle",
-        "requestedBy",
-        "comment",
-    },
-    "approval.approved": {"decisionBy", "channel"},
-    "approval.rejected": {"decisionBy", "channel"},
-    "approval.cancelled": {"cancelledBy"},
-    VERIFICATION_FAILED: {
-        "taskId",
-        "publicId",
-        "attempt",
-        "failedCheck",
-        "reason",
-        "consecutiveFailures",
-        "blocked",
-        "status",
-    },
-}
-
-
-def test_the_consumer_handles_every_decision_closing_type() -> None:
-    assert set(CLOSING) == {"approval.approved", "approval.rejected", "approval.cancelled"}
-
-
-@pytest.mark.parametrize(("event_type", "fields"), sorted(READS.items()))
-def test_payload_fields_read_are_in_the_catalog(event_type: str, fields: set[str]) -> None:
-    schema = schema_for(event_type, current_version(event_type))
-    assert schema is not None
-    assert fields <= set(schema["properties"]), fields - set(schema["properties"])
-
-
-def test_catalog_versions_the_consumer_was_written_for() -> None:
-    # A new version adds fields (CP-ADR-0068) and keeps these readable; the
-    # test marks the moment to look at what the new version carries.
-    assert {t: current_version(t) for t in READS} == {
-        REQUESTED: 2,
-        "approval.approved": 2,
-        "approval.rejected": 2,
-        "approval.cancelled": 2,
-        VERIFICATION_FAILED: 1,
-    }
 
 
 def _wire_fields(model: type) -> set[str]:
@@ -80,7 +29,8 @@ def _wire_fields(model: type) -> set[str]:
 
 
 def test_task_and_principal_fields_read_are_in_the_api_models() -> None:
-    assert {"publicId", "title", "ownerId", "assigneeId"} <= _wire_fields(TaskOut)
+    # Task fields the recipients ``taskOwner`` / ``taskAssignee`` read.
+    assert {"ownerId", "assigneeId"} <= _wire_fields(TaskOut)
     assert {"displayName"} <= _wire_fields(PrincipalOut)
     assert {"id", "status"} <= _wire_fields(RoleHolderOut)
 
