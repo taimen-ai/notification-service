@@ -728,7 +728,7 @@
     "approval.requested": {
       "entityType": "approval",
       "description": "A decision was requested from a principal or from the holders of a role.",
-      "currentVersion": 2,
+      "currentVersion": 3,
       "versions": {
         "1": {
           "schema": {
@@ -857,6 +857,102 @@
               "artifactId",
               "assignedPrincipalId",
               "comment",
+              "gate",
+              "requestedBy",
+              "requiredRoleId",
+              "taskId",
+              "taskPublicId",
+              "taskTitle",
+              "workspaceId"
+            ]
+          }
+        },
+        "3": {
+          "changes": "excludedPrincipals",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "artifactId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "requiredRoleId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Set when any holder of the role may decide"
+              },
+              "assignedPrincipalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Set when one principal decides"
+              },
+              "gate": {
+                "type": "boolean",
+                "description": "A gate holds the task's claim and completion until decided"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "The approval's workspace, else its task's workspace"
+              },
+              "taskPublicId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Public id of the task, e.g. TASK-000123"
+              },
+              "taskTitle": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "requestedBy": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Principal who requested the decision"
+              },
+              "comment": {
+                "type": "string",
+                "maxLength": 1000,
+                "description": "Request comment; credential-shaped material redacted, cut to the limit"
+              },
+              "excludedPrincipals": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": "Principals whose decision the core refuses (separation of duties, CP-ADR-0074); empty when nobody is excluded"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "artifactId",
+              "assignedPrincipalId",
+              "comment",
+              "excludedPrincipals",
               "gate",
               "requestedBy",
               "requiredRoleId",
@@ -1252,6 +1348,52 @@
               "ruleVersion",
               "score",
               "verdict"
+            ]
+          }
+        }
+      }
+    },
+    "calendar.published": {
+      "entityType": "calendar",
+      "description": "A new version of a working-day calendar was published (CP-ADR-0074 §9).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "calendarHash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "previousVersion": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "years": {
+                "type": "array"
+              },
+              "provisionalYears": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "calendarHash",
+              "key",
+              "previousVersion",
+              "provisionalYears",
+              "version",
+              "years"
             ]
           }
         }
@@ -1764,10 +1906,142 @@
         }
       }
     },
+    "knowledge.changed": {
+      "entityType": "workspace",
+      "description": "A knowledge snapshot opened, changed or closed documents in memory (CP-ADR-0076 §6); an empty reconciliation writes no event.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "snapshotId": {},
+              "pack": {},
+              "source": {},
+              "observedAt": {},
+              "workspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "rootWorkspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "key",
+                    "change"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "description": "Kind of the memory node, e.g. regulation"
+                    },
+                    "key": {
+                      "type": "string",
+                      "description": "Natural key of the node"
+                    },
+                    "change": {
+                      "type": "string",
+                      "enum": [
+                        "opened",
+                        "changed",
+                        "closed"
+                      ]
+                    }
+                  }
+                },
+                "description": "Natural keys the memory service reported for the snapshot"
+              },
+              "truncated": {
+                "type": "boolean",
+                "description": "The memory service cut the list; the counters stay complete"
+              },
+              "counters": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changes",
+              "counters",
+              "namespace",
+              "observedAt",
+              "pack",
+              "rootWorkspaceId",
+              "snapshotId",
+              "source",
+              "truncated",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "knowledge.document_stored": {
+      "entityType": "workspace",
+      "description": "A knowledge base document was stored in the memory service (CP-ADR-0060, amendment 2026-09-28); its text stays out of the journal.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "naturalKey": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "rootWorkspaceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "chunkCount": {
+                "type": "integer"
+              },
+              "linkCount": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "chunkCount",
+              "linkCount",
+              "namespace",
+              "naturalKey",
+              "rootWorkspaceId",
+              "title",
+              "type",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
     "knowledge.pack_registered": {
       "entityType": "knowledge_pack",
       "description": "A domain knowledge pack version was registered.",
-      "currentVersion": 1,
+      "currentVersion": 2,
       "versions": {
         "1": {
           "schema": {
@@ -1788,6 +2062,40 @@
             "additionalProperties": true,
             "required": [
               "name",
+              "status",
+              "version"
+            ]
+          }
+        },
+        "2": {
+          "changes": "scope (CP-ADR-0060, amendment 2026-09-28)",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {},
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "common",
+                  "tenant"
+                ],
+                "description": "common: a shared pack; tenant: a pack of the event's tenant"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "name",
+              "scope",
               "status",
               "version"
             ]
@@ -1967,6 +2275,1232 @@
             "required": [
               "displayName",
               "kind"
+            ]
+          }
+        }
+      }
+    },
+    "process.cancelled": {
+      "entityType": "process_instance",
+      "description": "An operator cancelled the instance.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 1000,
+                "description": "Reason given; credential-shaped material redacted, cut to the limit"
+              },
+              "compensated": {
+                "type": "boolean",
+                "description": "Compensations ran before the cancel"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "compensated",
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "reason",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.compensated": {
+      "entityType": "process_instance",
+      "description": "Compensations of completed steps ran in reverse order.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "scope": {
+                "type": "string",
+                "description": "all, or the id of the scope compensated"
+              },
+              "steps": {
+                "type": "array",
+                "description": "Ids of the steps compensated, in the order run"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "scope",
+              "steps",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.completed": {
+      "entityType": "process_instance",
+      "description": "The instance completed with an outcome.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "memory": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Case projection {case, facts, entities, documents} evaluated from the process's memory section; null when the process declares none"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "memory",
+              "outcome",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.correlated": {
+      "entityType": "process_instance",
+      "description": "An event matched start.key or a correlate rule of a running instance.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "triggerEventId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "triggerType": {
+                "type": "string"
+              },
+              "changedFields": {
+                "type": "array",
+                "description": "Data paths the event changed"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changedFields",
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "triggerEventId",
+              "triggerType",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.data_changed": {
+      "entityType": "process_instance",
+      "description": "Instance data changed; timers depending on the fields were recomputed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "changedFields": {
+                "type": "array",
+                "description": "Data paths that changed"
+              },
+              "element": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Element whose output or set changed them"
+              },
+              "memory": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Case projection {case, facts, entities, documents} evaluated from the process's memory section; null when the process declares none"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "changedFields",
+              "definitionKey",
+              "element",
+              "instanceId",
+              "instanceKey",
+              "memory",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.definition_published": {
+      "entityType": "process_definition",
+      "description": "A new immutable version of a process was published (CP-ADR-0074 §3).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "definitionHash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "previousVersion": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Null for the first version of the key"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "identityAgent": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Agent key the process acts as"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "governedBy": {
+                "type": "array",
+                "description": "Regulations of the process as a whole: {document, section}"
+              },
+              "elements": {
+                "type": "array",
+                "description": "Stages, steps, milestones and decision tables: {id, kind, parent, displayName, governedBy} — what the memory projection of the version is built from (CP-ADR-0076 §3)"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionHash",
+              "displayName",
+              "elements",
+              "governedBy",
+              "identityAgent",
+              "key",
+              "previousVersion",
+              "version",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
+    "process.escalated": {
+      "entityType": "process_instance",
+      "description": "An escalation level of a step fired.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "element": {
+                "type": "string"
+              },
+              "level": {
+                "type": "integer",
+                "description": "1-based escalation level of the step"
+              },
+              "action": {
+                "type": "string",
+                "description": "remind, reassign, notify or raise"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "to": {
+                "type": "array",
+                "description": "Resolved principals the action addresses"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "definitionKey",
+              "element",
+              "instanceId",
+              "instanceKey",
+              "level",
+              "taskId",
+              "to",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.failed": {
+      "entityType": "process_instance",
+      "description": "An error reached the top of the instance without a handler.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "error": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "detail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "element": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "element",
+              "error",
+              "instanceId",
+              "instanceKey",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.migrated": {
+      "entityType": "process_instance",
+      "description": "The instance moved to another version by the process's migration map.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "fromVersion": {
+                "type": "integer"
+              },
+              "map": {
+                "type": "object",
+                "description": "Old element id -> new element id"
+              },
+              "policy": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "fromVersion",
+              "instanceId",
+              "instanceKey",
+              "map",
+              "policy",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.milestone_lost": {
+      "entityType": "process_instance",
+      "description": "A reached milestone stopped holding: its guard is false again (a standing goal is no longer met); it is reached again when the guard holds again.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "milestone": {
+                "type": "string"
+              },
+              "stage": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "milestone",
+              "stage",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.milestone_reached": {
+      "entityType": "process_instance",
+      "description": "A milestone of the case was reached.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "milestone": {
+                "type": "string"
+              },
+              "stage": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "milestone",
+              "stage",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.recall_completed": {
+      "entityType": "process_instance",
+      "description": "Memory answered a recall step; the answer is in the instance journal (CP-ADR-0076 §4).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "step": {
+                "type": "string"
+              },
+              "recallId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Id of the recall intent"
+              },
+              "asOf": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "nodeCount": {
+                "type": "integer"
+              },
+              "edgeCount": {
+                "type": "integer"
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "resultHash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "asOf",
+              "definitionKey",
+              "edgeCount",
+              "instanceId",
+              "instanceKey",
+              "nodeCount",
+              "recallId",
+              "resultHash",
+              "step",
+              "truncated",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.recall_timed_out": {
+      "entityType": "process_instance",
+      "description": "A recall step got no answer in time; the step's onTimeout runs.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "step": {
+                "type": "string"
+              },
+              "recallId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {
+                "type": "string",
+                "description": "timeout, memory_unavailable or memory_disabled"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "reason",
+              "recallId",
+              "step",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.resumed": {
+      "entityType": "process_instance",
+      "description": "The instance was resumed; frozen timers got their remaining time back.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "cause": {
+                "type": "string",
+                "description": "event or operator"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "cause",
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.stage_entered": {
+      "entityType": "process_instance",
+      "description": "A stage of the case was entered.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "stage",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.stage_exited": {
+      "entityType": "process_instance",
+      "description": "A stage of the case was exited.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "stage",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.started": {
+      "entityType": "process_instance",
+      "description": "A process instance started from its start trigger.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "triggerEventId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Journal event that started it"
+              },
+              "triggerType": {
+                "type": "string"
+              },
+              "memory": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Case projection {case, facts, entities, documents} evaluated from the process's memory section; null when the process declares none"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "memory",
+              "triggerEventId",
+              "triggerType",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.suspended": {
+      "entityType": "process_instance",
+      "description": "The instance was suspended; its timers froze.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "cause": {
+                "type": "string",
+                "description": "event (a suspend block) or operator"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 1000,
+                "description": "Reason given; credential-shaped material redacted, cut to the limit"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "cause",
+              "definitionKey",
+              "instanceId",
+              "instanceKey",
+              "reason",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.timer_fired": {
+      "entityType": "process_instance",
+      "description": "A timer of the instance fired; the engine takes it as its next event.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "timerId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "element": {
+                "type": "string"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "definitionKey",
+              "dueAt",
+              "element",
+              "instanceId",
+              "instanceKey",
+              "timerId",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.timer_rescheduled": {
+      "entityType": "process_instance",
+      "description": "A pending timer moved: data or a calendar it reads changed, or on resume.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "timerId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "element": {
+                "type": "string"
+              },
+              "previousDueAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provisional": {
+                "type": "boolean",
+                "description": "Computed on a provisional calendar year"
+              },
+              "cause": {
+                "type": "string",
+                "description": "data_changed, calendar_changed or resumed"
+              },
+              "changedFields": {
+                "type": "array"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "cause",
+              "changedFields",
+              "definitionKey",
+              "dueAt",
+              "element",
+              "instanceId",
+              "instanceKey",
+              "previousDueAt",
+              "provisional",
+              "timerId",
+              "version"
             ]
           }
         }

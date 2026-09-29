@@ -141,6 +141,7 @@ def requested(
             "taskTitle": "Pay supplier invoice",
             "requestedBy": str(requester or uuid.uuid4()),
             "comment": comment,
+            "excludedPrincipals": [],
         },
         workspace_id=workspace,
         sequence=sequence,
