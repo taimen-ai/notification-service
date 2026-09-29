@@ -7,12 +7,12 @@ Apache License 2.0. This repository holds the **Notification Service** — it ac
 
 ## Before you start
 
-- Read the [Product Vision](https://github.com/monthu56/taimen/blob/main/docs/product-vision.md)
-  and the [ADR registry](https://github.com/monthu56/taimen/blob/main/docs/adr/README.md).
+- Read the [Product Vision](https://github.com/taimen-ai/taimen/blob/main/docs/product-vision.md)
+  and the [ADR registry](https://github.com/taimen-ai/taimen/blob/main/docs/adr/README.md).
   Architecture decisions are recorded as ADRs (in Russian, with an English
   title line); English summaries are provided on request in the ADR's
   discussion.
-- Check the [roadmap](https://github.com/monthu56/taimen/blob/main/docs/roadmap.md)
+- Check the [roadmap](https://github.com/taimen-ai/taimen/blob/main/docs/roadmap.md)
   and open issues before starting a large change. For anything that changes
   an API, a contract or a service boundary, open an issue first and propose
   an ADR.
@@ -23,8 +23,8 @@ We require a signed Contributor License Agreement (CLA) for every
 contribution, so that the project can be relicensed or defended without
 tracking down every author. You sign once for all Taimen repositories.
 
-- Individuals: [`cla/CLA-individual.md`](https://github.com/monthu56/taimen/blob/main/cla/CLA-individual.md)
-- Companies contributing on behalf of employees: [`cla/CLA-entity.md`](https://github.com/monthu56/taimen/blob/main/cla/CLA-entity.md)
+- Individuals: [`cla/CLA-individual.md`](https://github.com/taimen-ai/taimen/blob/main/cla/CLA-individual.md)
+- Companies contributing on behalf of employees: [`cla/CLA-entity.md`](https://github.com/taimen-ai/taimen/blob/main/cla/CLA-entity.md)
 
 The CLA grants the project a copyright and patent licence to your
 contribution; you keep your copyright.
@@ -36,7 +36,7 @@ It depends on sibling repositories by path (`../platform-auth-sdk`, `../control-
 the umbrella checkout, where the siblings are submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/monthu56/taimen.git
+git clone --recurse-submodules https://github.com/taimen-ai/taimen.git
 cd taimen/notification-service
 uv sync                       # runtime dependencies plus the `dev` group
 uv run pytest                 # tests
