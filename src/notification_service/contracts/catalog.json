@@ -5578,7 +5578,7 @@
     },
     "skill.updated": {
       "entityType": "skill",
-      "description": "The description or status of a skill version changed.",
+      "description": "The description, status or implementation endpoint of a skill version changed.",
       "currentVersion": 1,
       "versions": {
         "1": {
@@ -5591,6 +5591,26 @@
               },
               "rowVersion": {
                 "type": "integer"
+              },
+              "endpoint": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "from",
+                  "to"
+                ]
               }
             },
             "additionalProperties": true,
