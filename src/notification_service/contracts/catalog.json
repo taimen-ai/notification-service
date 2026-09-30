@@ -20,6 +20,81 @@
     "payload": "Data of the event, by the schema of (type, schemaVersion)"
   },
   "types": {
+    "agent.identity_replaced": {
+      "entityType": "agent",
+      "description": "A service agent moved to a new IAM identity; its principal stayed (CP-ADR-0073).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "description": "The revision whose rights the new identity got"
+              },
+              "principalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "issuer": {
+                "type": "string"
+              },
+              "iamTenantId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "iamPrincipalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "previousIssuer": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "previousIamTenantId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "previousIamPrincipalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 1000,
+                "description": "Reason given; credential-shaped material redacted, cut to the limit"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "iamPrincipalId",
+              "iamTenantId",
+              "issuer",
+              "key",
+              "previousIamPrincipalId",
+              "previousIamTenantId",
+              "previousIssuer",
+              "principalId",
+              "reason",
+              "revision"
+            ]
+          }
+        }
+      }
+    },
     "agent.retired": {
       "entityType": "agent",
       "description": "An agent was retired: stopped, binding revoked, history kept.",
@@ -1639,13 +1714,27 @@
     "delegation.revoked": {
       "entityType": "delegation",
       "description": "A delegation was revoked.",
-      "currentVersion": 1,
+      "currentVersion": 2,
       "versions": {
         "1": {
           "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
             "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "2": {
+          "changes": "reason",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "reason": {
+                "type": "string",
+                "description": "principal_disabled when a side of it was disabled (CP-ADR-0077)"
+              }
+            },
             "additionalProperties": true
           }
         }
@@ -1892,6 +1981,11 @@
               "iamPrincipalId": {},
               "permissions": {
                 "type": "array"
+              },
+              "previousPrincipalId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Only when the identity moved from another principal"
               }
             },
             "additionalProperties": true,
@@ -2275,6 +2369,113 @@
             "required": [
               "displayName",
               "kind"
+            ]
+          }
+        }
+      }
+    },
+    "principal.disabled": {
+      "entityType": "principal",
+      "description": "A human or agent principal was disabled: bindings and delegations revoked, sessions closed, claims freed, runs failed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "previousStatus": {
+                "type": "string",
+                "description": "active or paused"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 1000,
+                "description": "Reason given; credential-shaped material redacted, cut to the limit"
+              },
+              "revokedBindings": {
+                "type": "integer",
+                "description": "IAM bindings revoked"
+              },
+              "revokedDelegations": {
+                "type": "integer",
+                "description": "Delegations to or from it revoked"
+              },
+              "closedSessions": {
+                "type": "integer",
+                "description": "Open sessions of it or on its behalf closed"
+              },
+              "releasedClaims": {
+                "type": "integer",
+                "description": "Active claims released to the queue"
+              },
+              "failedRuns": {
+                "type": "integer",
+                "description": "Running runs on the released claims failed"
+              },
+              "withdrawnInvocations": {
+                "type": "integer",
+                "description": "Skill calls on its authority cancelled, leases it held returned"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "closedSessions",
+              "failedRuns",
+              "kind",
+              "previousStatus",
+              "reason",
+              "releasedClaims",
+              "revokedBindings",
+              "revokedDelegations",
+              "withdrawnInvocations"
+            ]
+          }
+        }
+      }
+    },
+    "principal.enabled": {
+      "entityType": "principal",
+      "description": "A disabled (or paused) human or agent principal was enabled. Only the status comes back: bindings, delegations, sessions and claims closed by :disable stay closed, IAM entry needs a new binding.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "previousStatus": {
+                "type": "string",
+                "description": "disabled or paused"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 1000,
+                "description": "Reason given; credential-shaped material redacted, cut to the limit"
+              },
+              "liveApiKeys": {
+                "type": "integer",
+                "description": "Unrevoked, unexpired API keys of it, which authenticate again"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "kind",
+              "liveApiKeys",
+              "previousStatus",
+              "reason"
             ]
           }
         }
@@ -5099,7 +5300,7 @@
     "session.closed": {
       "entityType": "session",
       "description": "A work session was closed.",
-      "currentVersion": 1,
+      "currentVersion": 2,
       "versions": {
         "1": {
           "schema": {
@@ -5108,6 +5309,26 @@
             "properties": {
               "releasedClaims": {
                 "type": "array"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "releasedClaims"
+            ]
+          }
+        },
+        "2": {
+          "changes": "reason",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "releasedClaims": {
+                "type": "array"
+              },
+              "reason": {
+                "type": "string",
+                "description": "principal_disabled when its principal, or the human it acted for, was disabled (CP-ADR-0077)"
               }
             },
             "additionalProperties": true,
@@ -6167,6 +6388,61 @@
               "relationId",
               "toTaskId",
               "type"
+            ]
+          }
+        }
+      }
+    },
+    "task.type_migrated": {
+      "entityType": "task",
+      "description": "The task was moved to another version of its type (ADR-0048, amendment 2026-09-30).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "publicId": {
+                "type": "string"
+              },
+              "typeKey": {
+                "type": "string"
+              },
+              "fromTypeVersion": {
+                "type": "integer"
+              },
+              "typeVersion": {
+                "type": "integer"
+              },
+              "fromStatus": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "systemStatusCategory": {
+                "type": "string"
+              },
+              "trigger": {
+                "type": "string",
+                "description": "task (one task) or bulk (:migrate-tasks of a version)"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "fromStatus",
+              "fromTypeVersion",
+              "publicId",
+              "status",
+              "systemStatusCategory",
+              "trigger",
+              "typeKey",
+              "typeVersion",
+              "version"
             ]
           }
         }
