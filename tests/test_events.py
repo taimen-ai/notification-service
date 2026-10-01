@@ -255,6 +255,86 @@ async def test_nobody_to_notify_an_unknown_one_or_a_malformed_id_skip_the_event(
     assert await count_notifications(hx) == 0
 
 
+def escalated(addressee: dict[str, Any] | None, workspace: uuid.UUID) -> dict[str, Any]:
+    """``process.escalated`` v2 of a level addressed to one role (CP-ADR-0078)."""
+    return event(
+        "process.escalated",
+        uuid.uuid4(),
+        {
+            "instanceId": str(uuid.uuid4()),
+            "definitionKey": "invoice-payment",
+            "version": 2,
+            "instanceKey": "INV-42",
+            "element": "approve",
+            "level": 1,
+            "action": "notify",
+            "taskId": None,
+            "to": ["role:accounting"],
+            "workspaceId": str(workspace),
+            "addressees": [addressee],
+            "unresolved": (
+                []
+                if addressee
+                else [{"index": 0, "target": "role:accounting", "reason": "unknown_role"}]
+            ),
+        },
+        workspace_id=workspace,
+    )
+
+
+ESCALATION = spec(
+    on={"type": "process.escalated"},
+    recipient={
+        "kind": "role",
+        "ref": "payload.addressees.0.roleId",
+        "workspace": "payload.addressees.0.workspaceId",
+    },
+    notification={"type": "process.escalated", "title": "Эскалация {{payload.instanceKey}}"},
+)
+
+
+async def test_an_escalation_reaches_the_role_of_its_addressee(
+    hx: Harness,
+    handler: RuleEventHandler,
+    token: Callable[..., str],
+    directory: FakeDirectory,
+    make_person: Callable[..., Person],
+) -> None:
+    holder = make_person()
+    role, workspace = uuid.uuid4(), uuid.uuid4()
+    directory.roles[(role, workspace)] = [holder.principal_id]
+    await apply_rule(hx, token, "escalation", ESCALATION)
+
+    addressee = {"principalId": None, "roleId": str(role), "workspaceId": str(workspace)}
+    await handler(escalated(addressee, workspace))
+    await hx.drain()
+
+    [item] = await inbox(hx, token, holder)
+    assert item["title"] == "Эскалация INV-42"
+
+
+async def test_an_unresolved_addressee_skips_the_rule_with_a_reason(
+    hx: Harness,
+    handler: RuleEventHandler,
+    token: Callable[..., str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # TASK-001156: the core puts null for a target of ``to`` it could not resolve.
+    await apply_rule(hx, token, "escalation", ESCALATION)
+    caplog.set_level("INFO", logger="notification_service.events")
+
+    await handler(escalated(None, uuid.uuid4()))
+
+    assert await count_notifications(hx) == 0
+    [skipped] = [record for record in caplog.records if "rule escalation" in record.getMessage()]
+    assert skipped.levelname == "INFO"
+    assert skipped.exc_info is None
+    assert (
+        "nobody to notify: the role recipient at payload.addressees.0.roleId"
+        " in the workspace at payload.addressees.0.workspaceId is empty on this event"
+    ) in skipped.getMessage()
+
+
 async def test_directory_outage_raises_so_the_event_is_retried(
     hx: Harness,
     handler: RuleEventHandler,

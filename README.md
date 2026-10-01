@@ -87,10 +87,15 @@ repository.
 ## Development
 
 ```bash
-uv sync
-NS_TEST_DATABASE_URL=postgresql+psycopg://… uv run pytest
-uv run ruff check . && uv run ruff format --check .
+make install                                     # uv sync --locked
+make lint                                        # ruff check and ruff format --check
+NS_TEST_DATABASE_URL=postgresql+psycopg://… make test
+make check                                       # lint, one alembic head, tests
 ```
+
+The executor's checks (`.agents/runner.yaml`) call these targets, and CI is to
+call the same ones (the umbrella repository has no job for it yet); the
+conventions for executors are in [AGENTS.md](AGENTS.md) (in Russian).
 
 The tests recreate the schema in `NS_TEST_DATABASE_URL` through the migration
 chain; SMTP is a local `aiosmtpd` server, the SSE stream is a real uvicorn server,

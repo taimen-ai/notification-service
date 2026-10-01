@@ -50,7 +50,7 @@ from telegram_fakes import (
 )
 
 SECRET = "hook-secret"
-BOT = "taimen_bot"
+BOT = "example_bot"
 _ids = itertools.count(1)
 
 
@@ -691,7 +691,7 @@ def test_callback_data_fits_and_round_trips() -> None:
 
 
 def test_commands_addressed_to_the_bot() -> None:
-    assert parse_command("/start@taimen_bot abc") == ("start", "abc")
+    assert parse_command("/start@example_bot abc") == ("start", "abc")
     assert parse_command("/unlink") == ("unlink", "")
     assert parse_command("hello") is None
 

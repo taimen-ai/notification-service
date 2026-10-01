@@ -80,10 +80,15 @@ Plane — `503` на отправку людям и ролям; вебхук Tel
 ## Разработка
 
 ```bash
-uv sync
-NS_TEST_DATABASE_URL=postgresql+psycopg://… uv run pytest
-uv run ruff check . && uv run ruff format --check .
+make install                                     # uv sync --locked
+make lint                                        # ruff check и ruff format --check
+NS_TEST_DATABASE_URL=postgresql+psycopg://… make test
+make check                                       # lint, одна голова alembic, тесты
 ```
+
+Эти цели зовут проверки исполнителя (`.agents/runner.yaml`), и их же должен звать
+CI (job'а в umbrella-репозитории пока нет); соглашения для исполнителей —
+[AGENTS.md](AGENTS.md).
 
 Тесты пересоздают схему в `NS_TEST_DATABASE_URL` цепочкой миграций, SMTP —
 локальный сервер `aiosmtpd`, поток SSE — настоящий сервер uvicorn, Bot API,

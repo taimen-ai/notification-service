@@ -196,7 +196,7 @@ tenant'ов не исполняются.
    поле, неизвестный `recipient.kind`, неизвестное действие — отказ (FR-013).
 2. Типы событий — по **снимку каталога событий ядра**
    `src/notification_service/contracts/catalog.json` (копия
-   `docs/events/catalog.json` ядра, снят с ревизии `feea0fc`; contract-тест сверяет её с
+   `docs/events/catalog.json` ядра, снят с ревизии `169e0a2`; contract-тест сверяет её с
    `control_plane.domain.event_catalog.catalog_document()` закреплённой ревизии
    ядра). `on.type` — существующий тип, префикс `x.*` — совпадает хотя бы с одним
    типом; каждый тип `close.on` существует. Иначе — `unknown_event_type`.

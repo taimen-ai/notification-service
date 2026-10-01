@@ -124,7 +124,9 @@ def test_the_adr_carries_the_three_rules_of_the_former_behaviour() -> None:
 
 @pytest.mark.parametrize("rule", _adr_rules(), ids=lambda rule: rule["key"])
 def test_adr_rule_is_valid_against_schema_and_catalog(rule: dict[str, Any]) -> None:
-    assert rule["apiVersion"] == "taimen.ai/v1"
+    # The core reads `<catalog>/v1`; which catalog is the package tool's check.
+    catalog_name, _, format_version = rule["apiVersion"].rpartition("/")
+    assert catalog_name and format_version == "v1"
     assert rule["kind"] == "NotificationRule"
     assert re.fullmatch(r"[a-z0-9][a-z0-9._-]*", rule["key"])
     spec = rule["spec"]
@@ -209,6 +211,68 @@ def test_the_event_the_core_serializes_has_only_envelope_fields() -> None:
 @pytest.mark.parametrize("rule", _adr_rules(), ids=lambda rule: rule["key"])
 def test_the_service_check_accepts_the_adr_rules(rule: dict[str, Any]) -> None:
     assert rules.check_spec(rule["spec"]) == []
+
+
+PROCESS_EVENT_TYPES = (
+    "process.step_entered",
+    "process.step_exited",
+    "process.sla_warning",
+    "process.sla_breached",
+    "process.sla_failed",
+)
+
+
+def test_the_catalog_carries_the_process_observability_events() -> None:
+    known = rules.catalog()
+    for event_type in PROCESS_EVENT_TYPES:
+        assert event_type in known, event_type
+
+
+@pytest.mark.parametrize(
+    "recipient",
+    [
+        {"kind": "role", "ref": "payload.owner.roleId", "workspace": "payload.owner.workspaceId"},
+        {"kind": "assigned", "ref": "payload.owner.principalId"},
+    ],
+    ids=["role", "assigned"],
+)
+def test_a_rule_on_a_breached_deadline_addresses_the_owner(recipient: dict[str, str]) -> None:
+    # TASK-000970: a rule on process.sla_* was refused with unknown_event_type.
+    spec = {
+        "on": {"type": "process.sla_breached"},
+        "recipient": recipient,
+        "notification": {
+            "type": "process.sla_breached",
+            "title": "Срок пропущен: {{payload.definitionKey}} {{payload.instanceKey}}",
+            "body": "Шаг {{payload.element}}, просрочка {{payload.overdueSeconds}} с.",
+        },
+        "dedupKeyTemplate": "control-plane:event:{{event.id}}",
+    }
+    assert rules.check_spec(spec) == []
+
+
+ESCALATION_ROLE = {
+    "kind": "role",
+    "ref": "payload.addressees.0.roleId",
+    "workspace": "payload.addressees.0.workspaceId",
+}
+
+
+def test_a_rule_on_an_escalation_addresses_the_role_of_its_level() -> None:
+    # TASK-001156: process.escalated v2 carries the resolved addressees of ``to``.
+    known = rules.catalog()
+    assert known.payload_schema("process.escalated")["properties"]["addressees"]
+    spec = {
+        "on": {"type": "process.escalated"},
+        "recipient": ESCALATION_ROLE,
+        "notification": {
+            "type": "process.escalated",
+            "title": "Эскалация: {{payload.definitionKey}} {{payload.instanceKey}}",
+            "body": "Шаг {{payload.element}}, уровень {{payload.level}}.",
+        },
+        "dedupKeyTemplate": "control-plane:event:{{event.id}}",
+    }
+    assert rules.check_spec(spec) == []
 
 
 FACTS: dict[str, Any] = {

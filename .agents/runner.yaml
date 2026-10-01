@@ -1,0 +1,15 @@
+# Machine-readable conventions for the executor daemon: format v1, see
+# runner_config.md next to control_plane_agent in control-plane. The daemon reads
+# this file from the task's base revision only; prose conventions are AGENTS.md.
+version: 1
+neighbours: [platform-auth-sdk, control-plane, iam-service]
+setup: make install
+services:
+  db:
+    template: postgres-16
+    env:
+      NS_TEST_DATABASE_URL: "postgresql+psycopg://{user}:{password}@{host}:{port}/{database}"
+checks:
+  - {name: lint, run: make lint}
+  - {name: migrations, run: make migrations-check}
+  - {name: tests, run: make test, services: [db]}

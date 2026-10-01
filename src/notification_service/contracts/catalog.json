@@ -1474,6 +1474,76 @@
         }
       }
     },
+    "calendar.restored": {
+      "entityType": "calendar",
+      "description": "A retired working-day calendar is back in use: a package apply installed it as it is (CP-ADR-0074, amendment Zh3).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "latestVersion": {
+                "type": "integer"
+              },
+              "packageKey": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "packageVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "latestVersion",
+              "packageKey",
+              "packageVersion"
+            ]
+          }
+        }
+      }
+    },
+    "calendar.retired": {
+      "entityType": "calendar",
+      "description": "Every version of a working-day calendar was retired: no process needs it any more (CP-ADR-0074, amendment Zh3).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "latestVersion": {
+                "type": "integer"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "latestVersion",
+              "reason"
+            ]
+          }
+        }
+      }
+    },
     "capability.assigned": {
       "entityType": "principal",
       "description": "A capability was assigned to the principal.",
@@ -2846,10 +2916,98 @@
         }
       }
     },
+    "process.definition_restored": {
+      "entityType": "process_definition",
+      "description": "A retired process is back in use: a package apply installed it as it is (CP-ADR-0074, amendment Zh3).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "latestVersion": {
+                "type": "integer"
+              },
+              "packageKey": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "packageVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "key",
+              "latestVersion",
+              "packageKey",
+              "packageVersion"
+            ]
+          }
+        }
+      }
+    },
+    "process.definition_retired": {
+      "entityType": "process_definition",
+      "description": "Every version of a process was retired: no new instances, open ones run to the end (CP-ADR-0074, amendment Zh2).",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "latestVersion": {
+                "type": "integer"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "openInstances": {
+                "type": "integer",
+                "description": "Open instances of every workspace of the key"
+              },
+              "byVersion": {
+                "type": "array",
+                "description": "{version, openInstances} of the versions with open ones"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "byVersion",
+              "key",
+              "latestVersion",
+              "openInstances",
+              "reason",
+              "workspaceId"
+            ]
+          }
+        }
+      }
+    },
     "process.escalated": {
       "entityType": "process_instance",
       "description": "An escalation level of a step fired.",
-      "currentVersion": 1,
+      "currentVersion": 2,
       "versions": {
         "1": {
           "schema": {
@@ -2900,6 +3058,160 @@
                 ],
                 "format": "uuid",
                 "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "action",
+              "definitionKey",
+              "element",
+              "instanceId",
+              "instanceKey",
+              "level",
+              "taskId",
+              "to",
+              "version"
+            ]
+          }
+        },
+        "2": {
+          "changes": "addressees, unresolved: addressees of the to targets (CP-ADR-0078, amendment 2026-09-30)",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "element": {
+                "type": "string"
+              },
+              "level": {
+                "type": "integer",
+                "description": "1-based escalation level of the step"
+              },
+              "action": {
+                "type": "string",
+                "description": "remind, reassign, notify or raise"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "to": {
+                "type": "array",
+                "description": "Resolved principals the action addresses"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              },
+              "addressees": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "principalId",
+                    "roleId",
+                    "workspaceId"
+                  ],
+                  "properties": {
+                    "principalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    },
+                    "roleId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    },
+                    "workspaceId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  },
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "principalId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "roleId": {
+                          "type": "null"
+                        }
+                      }
+                    },
+                    {
+                      "properties": {
+                        "principalId": {
+                          "type": "null"
+                        },
+                        "roleId": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "description": "One per item of to, in its order: the addressee {principalId, roleId, workspaceId} of the target (a role is the one of the instance's workspace); null when the target does not resolve"
+              },
+              "unresolved": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "index",
+                    "target",
+                    "reason"
+                  ],
+                  "properties": {
+                    "index": {
+                      "type": "integer",
+                      "description": "0-based position in to"
+                    },
+                    "target": {
+                      "type": "string",
+                      "description": "The target as to names it"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "description": "unknown_role, unknown_agent or unknown_principal"
+                    }
+                  }
+                },
+                "description": "Why the null addressees did not resolve; empty when all did"
               }
             },
             "additionalProperties": true,
@@ -3350,6 +3662,599 @@
         }
       }
     },
+    "process.sla_breached": {
+      "entityType": "process_instance",
+      "description": "A deadline passed while the step (process) is open; one per attempt.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "scope": {
+                "type": "string",
+                "description": "step or process"
+              },
+              "element": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Id of the step; null for the process scope"
+              },
+              "attempt": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Attempt of the step; null for the process scope"
+              },
+              "activityId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Activity of the attempt; null for the process scope"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Declared deadline: the due time of the deadline timer"
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "When the core processed the breach"
+              },
+              "overdueSeconds": {
+                "type": "integer",
+                "description": "detectedAt - dueAt, seconds, not negative"
+              },
+              "detectedBy": {
+                "type": "string",
+                "description": "timer or migration"
+              },
+              "provisional": {
+                "type": "boolean",
+                "description": "Computed on a provisional calendar year"
+              },
+              "owner": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "principalId",
+                  "roleId",
+                  "workspaceId"
+                ],
+                "properties": {
+                  "principalId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "roleId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "workspaceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "anyOf": [
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "null"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  }
+                ],
+                "description": "Addressee {principalId, roleId, workspaceId}, one of principalId and roleId set: the first resolvable candidate of spec.owner; null when none resolves"
+              },
+              "assignee": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "principalId",
+                  "roleId",
+                  "workspaceId"
+                ],
+                "properties": {
+                  "principalId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "roleId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "workspaceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "anyOf": [
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "null"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  }
+                ],
+                "description": "Addressee {principalId, roleId, workspaceId} the step is assigned to; null for the process scope or an unassigned step"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "activityId",
+              "assignee",
+              "attempt",
+              "definitionKey",
+              "detectedAt",
+              "detectedBy",
+              "dueAt",
+              "element",
+              "instanceId",
+              "instanceKey",
+              "overdueSeconds",
+              "owner",
+              "provisional",
+              "scope",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.sla_failed": {
+      "entityType": "process_instance",
+      "description": "A deadline could not be computed; the instance goes on, its SLA state is unknown.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "scope": {
+                "type": "string",
+                "description": "step or process"
+              },
+              "element": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Id of the step; null for the process scope"
+              },
+              "attempt": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Attempt of the step; null for the process scope"
+              },
+              "activityId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Activity of the attempt; null for the process scope"
+              },
+              "error": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "detail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "description": "calendar_missing or an expression error"
+              },
+              "owner": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "principalId",
+                  "roleId",
+                  "workspaceId"
+                ],
+                "properties": {
+                  "principalId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "roleId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "workspaceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "anyOf": [
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "null"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  }
+                ],
+                "description": "Addressee {principalId, roleId, workspaceId}, one of principalId and roleId set: the first resolvable candidate of spec.owner; null when none resolves"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "activityId",
+              "attempt",
+              "definitionKey",
+              "element",
+              "error",
+              "instanceId",
+              "instanceKey",
+              "owner",
+              "scope",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.sla_warning": {
+      "entityType": "process_instance",
+      "description": "The warning threshold of a deadline passed while the step (process) is open.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "scope": {
+                "type": "string",
+                "description": "step or process"
+              },
+              "element": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Id of the step; null for the process scope"
+              },
+              "attempt": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Attempt of the step; null for the process scope"
+              },
+              "activityId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Activity of the attempt; null for the process scope"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Declared deadline: the due time of the deadline timer"
+              },
+              "warnAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provisional": {
+                "type": "boolean",
+                "description": "Computed on a provisional calendar year"
+              },
+              "owner": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "principalId",
+                  "roleId",
+                  "workspaceId"
+                ],
+                "properties": {
+                  "principalId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "roleId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "workspaceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "anyOf": [
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "null"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  }
+                ],
+                "description": "Addressee {principalId, roleId, workspaceId}, one of principalId and roleId set: the first resolvable candidate of spec.owner; null when none resolves"
+              },
+              "assignee": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "principalId",
+                  "roleId",
+                  "workspaceId"
+                ],
+                "properties": {
+                  "principalId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "roleId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "workspaceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "anyOf": [
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "principalId": {
+                        "type": "null"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  }
+                ],
+                "description": "Addressee {principalId, roleId, workspaceId} the step is assigned to; null for the process scope or an unassigned step"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "activityId",
+              "assignee",
+              "attempt",
+              "definitionKey",
+              "dueAt",
+              "element",
+              "instanceId",
+              "instanceKey",
+              "owner",
+              "provisional",
+              "scope",
+              "version",
+              "warnAt"
+            ]
+          }
+        }
+      }
+    },
     "process.stage_entered": {
       "entityType": "process_instance",
       "description": "A stage of the case was entered.",
@@ -3508,6 +4413,261 @@
               "memory",
               "triggerEventId",
               "triggerType",
+              "version"
+            ]
+          }
+        }
+      }
+    },
+    "process.step_entered": {
+      "entityType": "process_instance",
+      "description": "A waiting step (activity) of the instance opened.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "element": {
+                "type": "string",
+                "description": "Id of the waiting step"
+              },
+              "stage": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Stage the step belongs to; null outside stages"
+              },
+              "stepKind": {
+                "type": "string",
+                "description": "human, approve, call, recall, listen or wait"
+              },
+              "attempt": {
+                "type": "integer",
+                "description": "1-based number of the entry into this element in the instance"
+              },
+              "activityId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Activity of this attempt"
+              },
+              "enteredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "waitsFor": {
+                "type": "string",
+                "description": "task, approval, skill, agent, child, event, time or memory"
+              },
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Task the step waits for"
+              },
+              "approvalIds": {
+                "type": "array",
+                "description": "Approvals the step waits for"
+              },
+              "skillInvocationId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Skill invocation the step waits for"
+              },
+              "childInstanceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Child instance the step waits for"
+              },
+              "due": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Declared deadline of the step; null without due"
+              },
+              "warnAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Warning threshold; null without warnBefore"
+              },
+              "provisional": {
+                "type": "boolean",
+                "description": "The deadline is computed on a provisional year"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "activityId",
+              "approvalIds",
+              "attempt",
+              "childInstanceId",
+              "definitionKey",
+              "due",
+              "element",
+              "enteredAt",
+              "instanceId",
+              "instanceKey",
+              "provisional",
+              "skillInvocationId",
+              "stage",
+              "stepKind",
+              "taskId",
+              "version",
+              "waitsFor",
+              "warnAt"
+            ]
+          }
+        }
+      }
+    },
+    "process.step_exited": {
+      "entityType": "process_instance",
+      "description": "A waiting step (activity) of the instance closed.",
+      "currentVersion": 1,
+      "versions": {
+        "1": {
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "definitionKey": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "description": "Version of the process the instance is pinned to"
+              },
+              "instanceKey": {
+                "type": "string",
+                "description": "Value of start.key; unique per definition key"
+              },
+              "element": {
+                "type": "string",
+                "description": "Id of the waiting step"
+              },
+              "stage": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Stage the step belongs to; null outside stages"
+              },
+              "stepKind": {
+                "type": "string",
+                "description": "human, approve, call, recall, listen or wait"
+              },
+              "attempt": {
+                "type": "integer",
+                "description": "1-based number of the entry into this element in the instance"
+              },
+              "activityId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Activity of this attempt"
+              },
+              "enteredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "exitedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "outcome": {
+                "type": "string",
+                "description": "completed, cancelled, withdrawn (a participant cancelled the step's task, or the last approval of the step, outside the process; the event's actorId is that participant), interrupted, failed, timed_out or migrated"
+              },
+              "durationSeconds": {
+                "type": "integer",
+                "description": "exitedAt - enteredAt, wall-clock seconds"
+              },
+              "due": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Declared deadline of the step; null without due"
+              },
+              "breached": {
+                "type": "boolean",
+                "description": "The step closed after its deadline"
+              },
+              "overdueSeconds": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "exitedAt - due when breached, else null"
+              },
+              "workspaceId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Workspace of the instance: the scope of its case in memory"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "activityId",
+              "attempt",
+              "breached",
+              "definitionKey",
+              "due",
+              "durationSeconds",
+              "element",
+              "enteredAt",
+              "exitedAt",
+              "instanceId",
+              "instanceKey",
+              "outcome",
+              "overdueSeconds",
+              "stage",
+              "stepKind",
               "version"
             ]
           }
@@ -3675,7 +4835,7 @@
               },
               "cause": {
                 "type": "string",
-                "description": "data_changed, calendar_changed or resumed"
+                "description": "data_changed, calendar_changed, resumed or migrated (deadlines recomputed by the new version, CP-ADR-0074 amendment 2026-09-29 §11)"
               },
               "changedFields": {
                 "type": "array"

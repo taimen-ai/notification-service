@@ -272,7 +272,7 @@ class RuleEventHandler:
             return
         recipient = await self._recipient(spec["recipient"], facts)
         if recipient is None:
-            raise RuleSkipped("nobody to notify")
+            raise RuleSkipped(f"nobody to notify: {_unresolved(spec['recipient'])}")
         key = await self._dedup_key(rule, facts)
         notification: Mapping[str, Any] = spec["notification"]
         title, _ = await facts.fill(notification["title"])
@@ -411,6 +411,25 @@ class RuleEventHandler:
             logger.info(
                 "rule %s, event %s: no notification %s to close", rule.key, event.get("id"), key
             )
+
+
+def _unresolved(recipient: Mapping[str, Any]) -> str:
+    """Why the recipient of a rule named no one on this event, for the log."""
+    kind = recipient["kind"]
+    if kind in ("assigned", "role"):
+        where = recipient.get("ref") or DEFAULT_ASSIGNED_REF
+        reason = f"the {kind} recipient at {where}"
+        if recipient.get("workspace"):
+            reason += f" in the workspace at {recipient['workspace']}"
+        reason += " is empty on this event"
+    elif kind == "principal":
+        reason = "the principal recipient has no id"
+    else:
+        reason = f"the task of the event has no {kind}"
+    fallback = recipient.get("fallback")
+    if fallback and fallback != "none":
+        reason += f", nor has the fallback {fallback}"
+    return reason
 
 
 def _scalar_text(value: Any) -> str:
