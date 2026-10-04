@@ -37,6 +37,7 @@ def binding(principal_id: uuid.UUID, iam_tenant: uuid.UUID, **fields: Any) -> di
         "iam_principal_id": uuid.uuid4(),
         "permissions": ["tasks.read"],
         "status": "active",
+        "visibility": "tenant",
         "revoked_at": None,
         "last_used_at": None,
         "created_at": NOW,

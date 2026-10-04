@@ -1,8 +1,8 @@
 """The skill ``notify.send@1``: sending a notification from a package (TAI-ADR-0048 §6).
 
 The Control Plane's skill executor calls an ``http`` skill with
-``POST endpoint`` and the envelope ``{invocationId, idempotencyKey, inputs}``
-under a Bearer token of this service's audience. The 2xx body is the skill's
+``POST endpoint`` and the envelope ``{invocationId, idempotencyKey, settings,
+inputs}`` under a Bearer token of this service's audience. The 2xx body is the skill's
 outputs; a failure is ``{"error": {code, message, retryable, details}}``
 (skill-sdk, TAI-ADR-0045), whose ``retryable`` the executor takes as is — so
 every error of this route carries it, including the ones of authentication.
@@ -48,6 +48,11 @@ class SkillInvocation(ApiModel):
     # The contract declares ``idempotency: required``: the core does not
     # accept an invocation without a key, so one always comes.
     idempotency_key: str = Field(min_length=1, max_length=200)
+    # The settings of the skill's package the claim handed out,
+    # ``{package, version, schemaRevision, values}`` or ``null`` for a skill
+    # not from a package (CP-ADR-0081 §8, amendment G006 В3). This skill has
+    # no settings of its own: the member is accepted and not used.
+    settings: dict[str, Any] | None = None
     inputs: NotificationContent
 
 

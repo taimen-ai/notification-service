@@ -1,6 +1,6 @@
 [project]
 name = "notification-service"
-version = "0.2.1"
+version = "0.2.2"
 description = "Product-neutral notification service: send, route by recipient preferences, deliver over channels, web inbox"
 readme = "README.md"
 requires-python = ">=3.12"

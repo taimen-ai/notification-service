@@ -64,6 +64,8 @@ async def test_principal_name_from_principal_out() -> None:
         display_name="Finance Director",
         status="active",
         metadata_json={},
+        profile={},
+        version=1,
         created_at=NOW,
         updated_at=NOW,
     ).model_dump(mode="json", by_alias=True)

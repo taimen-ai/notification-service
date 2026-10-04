@@ -13,7 +13,7 @@ TAI-ADR-0045 (skill-sdk: ошибка `{"error": {code, retryable}}`), CP-ADR-00
 Пакет шлёт уведомление не прямым вызовом API, а скиллом: вызов проходит через
 ядро (права, аудит, повторы), исполняет его демон Control Plane. Исполнитель
 протокола `http` делает `POST <endpoint>` с конвертом
-`{invocationId, idempotencyKey, inputs}` и Bearer-токеном audience из
+`{invocationId, idempotencyKey, settings, inputs}` и Bearer-токеном audience из
 `implementation.auth.audience`; тело 2xx — outputs; ошибка с телом
 `{"error": {code, retryable}}` берётся как есть, без такого тела 4xx —
 неповторяемый отказ, 5xx — повторяемый. `POST /api/v1/notifications` ждёт
@@ -43,6 +43,11 @@ TAI-ADR-0045 (skill-sdk: ошибка `{"error": {code, retryable}}`), CP-ADR-00
   Ключ обязателен: контракт объявляет `idempotency: required`, и ядро не
   создаёт вызов без ключа; конверт без ключа — `422 invalid_inputs`.
 - `invocationId` принимается и не хранится: связь с вызовом — через ключ.
+- `settings` — настройки пакета скилла, которые выдала заявка вызова
+  (`{package, version, schemaRevision, values}` или `null`, CP-ADR-0081 §8,
+  амендмент В3 ядра). Своих настроек у `notify.send@1` нет: член принимается
+  и не используется. Конверт строгий, поэтому без этого члена ядро 0.10.0
+  получало `422 invalid_inputs` на каждый вызов.
 
 Отправитель уведомления (`senderId`) — principal токена, то есть сервисный
 аккаунт исполнителя скиллов; кто вызвал скилл, видно в вызове в ядре.

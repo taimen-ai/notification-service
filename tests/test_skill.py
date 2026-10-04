@@ -68,7 +68,12 @@ class Executor:
         transport = httpx.ASGITransport(app=harness.app)
         self.protocol = HttpProtocol(token_source, policy=policy, transport=transport)
 
-    async def call(self, inputs: dict[str, Any], key: str | None) -> dict[str, Any]:
+    async def call(
+        self,
+        inputs: dict[str, Any],
+        key: str | None,
+        settings: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         outcome = await self.protocol.call(
             SkillCall(
                 invocation_id=str(uuid.uuid4()),
@@ -77,6 +82,7 @@ class Executor:
                 skill="notify.send@1",
                 implementation=CONTRACT["contract"]["implementation"],
                 timeout_seconds=CONTRACT["contract"]["timeoutSeconds"],
+                settings=settings,
             )
         )
         return outcome.output  # type: ignore[no-any-return]
@@ -120,6 +126,24 @@ async def test_invocation_sends_one_notification(
         "/api/v1/me/notifications", headers=auth(token(person.iam_principal_id))
     )
     assert [i["notificationId"] for i in inbox.json()["items"]] == [outputs["notificationId"]]
+
+
+async def test_package_settings_of_the_claim_do_not_break_the_call(
+    harness: Harness,
+    token: Callable[..., str],
+    make_person: Callable[..., Person],
+    unique_key: Callable[[], str],
+) -> None:
+    # A skill published by a package gets the package's settings in the
+    # envelope (CP-ADR-0081 §8); notify.send@1 has none of its own.
+    settings = {"package": "notify", "version": 2, "schemaRevision": 1, "values": {"x": 1}}
+
+    outputs = await Executor(harness, token()).call(
+        inputs(make_person()), unique_key(), settings=settings
+    )
+
+    assert outputs["deliveries"] == [{"channel": "web", "status": "pending"}]
+    assert await notifications(harness) == 1
 
 
 async def test_repeated_idempotency_key_returns_the_same_notification(
