@@ -12,11 +12,12 @@
 
 ## Среда
 
-- Рабочая копия — текущий каталог (`notification-service`). Соседи
-  `../platform-auth-sdk`, `../control-plane` и `../iam-service` стоят на ревизиях,
+- Рабочая копия — текущий каталог (`services/notification-service` в раскладке
+  суперпроекта, TAI-ADR-0064). Соседи `../../sdk/platform-auth-sdk`, `../control-plane`
+  и `../iam-service` стоят на ревизиях,
   закреплённых суперпроектом, и доступны **только для чтения**: изменённый сосед
   проваливает прогон (`neighbour_modified`).
-- Дизайн фичи — `specs/notifications/` суперпроекта (spec, plan, tasks); в рабочей
+- Дизайн фичи — `docs/specs/notifications/` суперпроекта (spec, plan, tasks); в рабочей
   копии его нет, читай из суперпроекта.
 - **Контракт другого сервиса не выдумывай.** Вызовы Control Plane — через клиент
   `../control-plane/client` и схемы `../control-plane/src/control_plane/api/v1/schemas.py`;

@@ -32,12 +32,12 @@ contribution; you keep your copyright.
 ## Development setup
 
 The component is a [uv](https://docs.astral.sh/uv/) project on Python 3.12.
-It depends on sibling repositories by path (`../platform-auth-sdk`, `../control-plane/client` and `../control-plane`), so develop it from
+It depends on sibling repositories by path (`../../sdk/platform-auth-sdk`, `../control-plane/client` and `../control-plane`), so develop it from
 the umbrella checkout, where the siblings are submodules:
 
 ```bash
 git clone --recurse-submodules https://github.com/taimen-ai/taimen.git
-cd taimen/notification-service
+cd taimen/services/notification-service
 uv sync                       # runtime dependencies plus the `dev` group
 uv run pytest                 # tests
 uv run ruff check .           # lint

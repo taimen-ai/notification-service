@@ -7,7 +7,7 @@ service or skill, chooses channels according to the recipient's preferences (web
 inbox, Telegram, email), keeps a delivery log and accepts human decisions from the
 channels (Telegram buttons).
 
-The design lives in `specs/notifications/` of the superproject, the platform
+The design lives in `docs/specs/notifications/` of the superproject, the platform
 decisions are TAI-ADR-0048 and TAI-ADR-0049; the service's own decisions are in
 [docs/adr/](docs/adr/). The service skeleton is task N006 (TASK-000415): sending
 with deduplication, addressing by principal / role / group, preferences and
@@ -46,8 +46,8 @@ account. Details and the API contract —
 ## Running
 
 The `platform-auth-sdk` and `control-plane-client` dependencies are installed by
-path from the neighbouring directories (`../platform-auth-sdk`,
-`../control-plane`).
+path from the directories of the umbrella layout (`../../sdk/platform-auth-sdk`,
+`../control-plane`; TAI-ADR-0064).
 
 ```bash
 uv sync

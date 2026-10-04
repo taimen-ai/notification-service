@@ -23,9 +23,10 @@ dependencies = [
 ]
 
 # Соседние репозитории подключаются путём, как в control-plane: единого
-# внутреннего индекса пакетов у платформы пока нет.
+# внутреннего индекса пакетов у платформы пока нет. Пути — по раскладке суперпроекта
+# (TAI-ADR-0064): сервисы в services/, SDK в sdk/.
 [tool.uv.sources]
-platform-auth-sdk = { path = "../platform-auth-sdk", editable = true }
+platform-auth-sdk = { path = "../../sdk/platform-auth-sdk", editable = true }
 control-plane-client = { path = "../control-plane/client", editable = true }
 control-plane = { path = "../control-plane", editable = true }
 
