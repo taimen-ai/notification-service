@@ -246,7 +246,7 @@ wheels = [
 
 [[package]]
 name = "control-plane"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "../control-plane" }
 dependencies = [
     { name = "alembic" },
@@ -770,7 +770,7 @@ wheels = [
 
 [[package]]
 name = "notification-service"
-version = "0.1.0"
+version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
